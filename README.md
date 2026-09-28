@@ -19,6 +19,31 @@ python bridge.py --deadzone 0.12  # groessere Deadzone bei starkem Drift
 python bridge.py --quiet          # ohne Live-Anzeige
 ```
 
+## Anzeigefenster
+
+```
+pythonw monitor.py
+```
+
+Zeigt, ob Controller, Bruecke und virtueller Xbox-Pad da sind, und spiegelt
+die Eingaben als Schema - so, wie ein Spiel sie ueber XInput sieht. Laeuft
+die Bruecke nicht, laesst sie sich dort starten. Aus dem Tray per
+Doppelklick aufs Symbol oder "Anzeige oeffnen".
+
+## Adaptive Trigger
+
+XInput kennt keinen Trigger-Widerstand, Spiele koennen ihn ueber den
+virtuellen Pad also nicht steuern. Die Bruecke setzt ihn selbst - Profil
+im Tray-Menue unter "Trigger" oder im Anzeigefenster waehlen:
+
+- **Racing** - L2 (Bremse) mit Druckpunkt nach einem Drittel, R2 (Gas) leicht
+- **Racing + Rumble** - dazu vibriert R2 mit, wenn das Spiel rumblet
+- **Shooter** - R2 mit Abzugs-Druckpunkt
+- **Aus**
+
+Die Auswahl landet in `settings.json` und wirkt sofort. Beim Beenden
+nimmt die Bruecke den Widerstand zurueck.
+
 ## Batterieanzeige
 
 ```

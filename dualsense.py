@@ -184,10 +184,44 @@ class DualSense:
         except Exception:
             pass
 
+    def vibration_v2(self) -> bool:
+        """Kann der Controller die kraeftigere Rumble-Emulation? Ab
+        Firmware 2.21, die Edge immer. Steht im Feature-Report 0x20."""
+        if self.info["product_id"] == 0x0DF2:
+            return True
+        try:
+            r = self.dev.get_feature_report(0x20, 64)
+            return len(r) >= 46 and (r[44] | (r[45] << 8)) >= 0x0221
+        except Exception:
+            return False
+
     def poll(self) -> State | None:
         data = self.dev.read(78)
         if not data:
             return None
+        st = decode(bytes(data))
+        if st is None:
+            return None
+        self.bluetooth = data[0] == BT_REPORT_ID
+        self.state = st
+        return st
+
+    def poll_latest(self, timeout_ms: int = 4) -> State | None:
+        """Wartet bis zu timeout_ms auf einen Report und leert dann die
+        Warteschlange, damit nur der neueste zaehlt.
+
+        Ueber USB kommen 1000 Reports/s. Wer pro Durchlauf nur einen liest,
+        faellt knapp zurueck, bis der Windows-Puffer voll ist - dann haengt
+        die Eingabe dauerhaft zig Millisekunden hinterher."""
+        data = self.dev.read(78, timeout_ms)
+        if not data:
+            return None
+        # Begrenzt, damit ein Dauerstrom die Schleife nicht festhaelt.
+        for _ in range(256):
+            newer = self.dev.read(78)
+            if not newer:
+                break
+            data = newer
         st = decode(bytes(data))
         if st is None:
             return None

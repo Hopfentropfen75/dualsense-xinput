@@ -14,6 +14,8 @@ import time
 
 import vgamepad as vg
 
+import settings
+import triggers
 import xinput_ref as xr
 from dualsense import DualSense, State
 from mapping import Config, calibrate, map_state
@@ -38,6 +40,13 @@ class Bridge:
         # Von aussen setzbar (Tray-Menue), wird im Loop abgearbeitet.
         self.recalibrate_requested = False
 
+        # Trigger-Profil; kommt aus settings.json und wird im Loop neu
+        # gelesen, sobald sich die Datei aendert.
+        self.profile = triggers.get(triggers.DEFAULT)
+        self._settings_mtime = -1.0
+        self._settings_check = 0.0
+        self._triggers_sent: tuple[bytes, bytes] | None = None
+
         # Rumble kommt aus einem ViGEm-Thread; das HID-Handle gehoert dem
         # Hauptthread, also hier nur merken und dort senden.
         self._rumble = (0, 0)
@@ -61,7 +70,8 @@ class Bridge:
 
     def calibrate(self, seconds: float = 1.0) -> None:
         self._first_state()
-        self.out = OutputChannel(self.ds.dev, self.ds.bluetooth)
+        self.out = OutputChannel(self.ds.dev, self.ds.bluetooth,
+                                 self.ds.vibration_v2())
         if not self.quiet:
             print(f"Kalibriere {seconds:.0f}s - Controller nicht anfassen ...")
         samples: list[State] = []
@@ -105,13 +115,38 @@ class Bridge:
                 return
             time.sleep(0.05)
 
+    def _with_triggers(self, rep):
+        """Haengt die Trigger-Effekte an, aber nur wenn sie sich geaendert
+        haben - sonst wuerde jeder Rumble-Report sie neu anstossen."""
+        eff = self.profile.effects(*self._rumble)
+        if eff != self._triggers_sent:
+            self._triggers_sent = eff
+            rep.triggers(*eff)
+        return rep
+
+    def _check_settings(self) -> None:
+        now = time.time()
+        if now - self._settings_check < 0.5 or self.out is None:
+            return
+        self._settings_check = now
+        m = settings.mtime()
+        if m == self._settings_mtime:
+            return
+        self._settings_mtime = m
+        self.profile = triggers.get(settings.load()["trigger_profile"])
+        self._triggers_sent = None
+        try:
+            self.out.send(self._with_triggers(self.out.new()))
+        except OSError:
+            pass
+
     def _flush_rumble(self) -> None:
         if not self._rumble_dirty or self.out is None:
             return
         large, small = self._rumble
         try:
-            self.out.send(self.out.new().rumble(large, small)
-                          .lightbar(*ACTIVE_COLOR))
+            self.out.send(self._with_triggers(
+                self.out.new().rumble(large, small).lightbar(*ACTIVE_COLOR)))
         except OSError:
             pass
         self._rumble_dirty = False
@@ -123,6 +158,7 @@ class Bridge:
         self._prime()
         if self.out:
             self.out.send(self.out.new().lightbar(*ACTIVE_COLOR).player_leds(0x04))
+            self._check_settings()
 
         link = "Bluetooth" if self.ds.bluetooth else "USB"
         if not self.quiet:
@@ -132,23 +168,32 @@ class Bridge:
 
         end = time.time() + duration if duration else None
         last_draw = 0.0
+        # Zuletzt an ViGEm gesendeter Zustand. In Ruhe liefert der
+        # Controller 1000x/s dasselbe - das muss nicht jedes Mal in den Treiber.
+        last_sent: tuple | None = None
         try:
             while (end is None or time.time() < end) and not (
                     stop is not None and stop.is_set()):
                 if self.recalibrate_requested:
                     self.recalibrate_requested = False
                     self.calibrate()
+                    last_sent = None
 
-                st = self.ds.poll()
+                # Blockiert bis zum naechsten Report statt zu schlafen; der
+                # Timeout haelt Rumble und Stop-Abfrage auch ohne Input am Laufen.
+                st = self.ds.poll_latest(timeout_ms=4)
                 if st:
                     x = map_state(st, self.cfg)
-                    r = self.pad.report
-                    r.wButtons = x.buttons
-                    r.bLeftTrigger = x.lt
-                    r.bRightTrigger = x.rt
-                    r.sThumbLX, r.sThumbLY = x.lx, x.ly
-                    r.sThumbRX, r.sThumbRY = x.rx, x.ry
-                    self.pad.update()
+                    key = (x.buttons, x.lt, x.rt, x.lx, x.ly, x.rx, x.ry)
+                    if key != last_sent:
+                        last_sent = key
+                        r = self.pad.report
+                        r.wButtons = x.buttons
+                        r.bLeftTrigger = x.lt
+                        r.bRightTrigger = x.rt
+                        r.sThumbLX, r.sThumbLY = x.lx, x.ly
+                        r.sThumbRX, r.sThumbRY = x.rx, x.ry
+                        self.pad.update()
 
                     now = time.time()
                     if not self.quiet and now - last_draw > 0.05:
@@ -162,7 +207,7 @@ class Bridge:
                         sys.stdout.flush()
 
                 self._flush_rumble()
-                time.sleep(0.001)
+                self._check_settings()
         except KeyboardInterrupt:
             pass
         finally:
@@ -188,7 +233,10 @@ class Bridge:
             pass
         if self.out:
             try:
-                self.out.send(self.out.new().rumble(0, 0).lightbar(0, 0, 0))
+                # Widerstand zuruecknehmen - sonst bleibt er auch ohne
+                # Bruecke im Controller haengen.
+                self.out.send(self.out.new().rumble(0, 0).lightbar(0, 0, 0)
+                              .triggers(triggers.off(), triggers.off()))
             except OSError:
                 pass
         self.ds.close()

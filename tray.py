@@ -6,11 +6,16 @@ und zeigt nebenbei den Akkustand neben der Uhr. Beenden ueber das Menue.
 
 from __future__ import annotations
 
+import subprocess
+import sys
 import threading
 import time
+from pathlib import Path
 
 import pystray
 
+import settings
+import triggers
 from battery import Status, make_icon, windows_light_taskbar
 from bridge import Bridge
 from mapping import Config
@@ -36,6 +41,11 @@ class App:
             menu=pystray.Menu(
                 pystray.MenuItem(lambda _: self._title(), None, enabled=False),
                 pystray.Menu.SEPARATOR,
+                pystray.MenuItem("Anzeige oeffnen", self._open_monitor,
+                                 default=True),
+                pystray.MenuItem("Trigger", pystray.Menu(*(
+                    self._profile_item(k, p)
+                    for k, p in triggers.PROFILES.items()))),
                 pystray.MenuItem("Neu kalibrieren", self._recalibrate),
                 pystray.MenuItem("Beenden", self._quit),
             ),
@@ -54,6 +64,22 @@ class App:
         self._stop.set()
         self._wake.set()
         self.icon.stop()
+
+    def _open_monitor(self, *_):
+        # Eigener Prozess: tkinter will seinen eigenen Hauptthread.
+        here = Path(__file__).parent
+        exe = Path(sys.executable).with_name("pythonw.exe")
+        subprocess.Popen([str(exe if exe.exists() else sys.executable),
+                          str(here / "monitor.py")], cwd=str(here))
+
+    @staticmethod
+    def _profile_item(key: str, prof: triggers.Profile):
+        # Die Bruecke merkt die geaenderte settings.json und schaltet um.
+        return pystray.MenuItem(
+            prof.name,
+            lambda *_: settings.save(trigger_profile=key),
+            checked=lambda _: settings.load()["trigger_profile"] == key,
+            radio=True)
 
     def _recalibrate(self, *_):
         # Die Bruecke laeuft weiter; nur die Mittelpunkte werden neu gemessen.
@@ -109,8 +135,38 @@ class App:
     def run(self) -> None:
         threading.Thread(target=self._run_bridge, daemon=True).start()
         threading.Thread(target=self._run_ui, daemon=True).start()
-        self.icon.run()
+        self.icon.run(setup=self._on_ready)
+
+    def _on_ready(self, icon) -> None:
+        # Mit eigenem setup() macht pystray das Icon nicht selbst sichtbar.
+        icon.visible = True
+        try:
+            icon.notify("Bruecke laeuft - Symbol neben der Uhr.", "DualSense")
+        except Exception:
+            pass
+
+
+def _already_running() -> bool:
+    """Ein zweiter Start wuerde einen zweiten virtuellen Pad anlegen - das
+    Spiel saehe dann wieder zwei Controller. Ein benannter Mutex verhindert
+    das; der Handle bleibt bis Prozessende offen."""
+    import ctypes
+
+    k32 = ctypes.windll.kernel32
+    global _mutex
+    _mutex = k32.CreateMutexW(None, False, "Local\\dualsense_xinput_tray")
+    return k32.GetLastError() == 183  # ERROR_ALREADY_EXISTS
 
 
 if __name__ == "__main__":
+    if _already_running():
+        import ctypes
+
+        ctypes.windll.user32.MessageBoxW(
+            None,
+            "Die DualSense-Bruecke laeuft bereits.\n\n"
+            "Das Controller-Symbol sitzt neben der Uhr (ggf. unter dem "
+            "Pfeil ^). Beenden ueber Rechtsklick > Beenden.",
+            "DualSense", 0x40)
+        raise SystemExit(0)
     App().run()

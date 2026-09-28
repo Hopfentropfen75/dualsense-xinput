@@ -2,3 +2,5 @@ __pycache__/
 *.py[cod]
 *.log
 .venv/
+settings.json
+settings.tmp
