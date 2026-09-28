@@ -13,8 +13,11 @@ import sys
 import threading
 import time
 import tkinter as tk
+from tkinter import messagebox, simpledialog
 from pathlib import Path
 
+import games
+import rangecheck
 import settings
 import triggers
 import xinput_ref as xr
@@ -89,6 +92,275 @@ class BatteryWatcher:
         self._stop.set()
 
 
+class ProfilePanel:
+    """Rechte Spalte: Profil waehlen, anlegen, loeschen und einstellen.
+
+    Jede Aenderung landet sofort in settings.json; die Bruecke uebernimmt
+    sie innerhalb von etwa zwei Sekunden."""
+
+    # (Schluessel, Beschriftung, von, bis, Schritt, Anzeige-Faktor, Einheit)
+    SLIDERS = {
+        "Trigger-Widerstand": [
+            ("brake_start", "Bremse: Druckpunkt", 0, 8, 1, 1, ""),
+            ("brake_force", "Bremse: Kraft", 1, 8, 1, 1, ""),
+            ("gas_force", "Gas: Widerstand", 0, 8, 1, 1, ""),
+        ],
+        "Sticks": [
+            ("stick_deadzone", "Deadzone innen", 0, 0.25, 0.01, 100, "%"),
+            ("stick_outer", "Aeussere Zone", 0, 0.25, 0.01, 100, "%"),
+            ("anti_deadzone", "Anti-Deadzone", 0, 0.40, 0.01, 100, "%"),
+        ],
+        "Trigger-Eingabe": [
+            ("trigger_deadzone", "Leerweg", 0, 0.20, 0.01, 100, "%"),
+            ("trigger_curve", "Kurve", 0.5, 3.0, 0.1, 1, ""),
+        ],
+        "Vibration": [
+            ("rumble_gain", "Staerke", 0, 2.0, 0.05, 100, "%"),
+        ],
+    }
+
+    def __init__(self, parent: tk.Widget, app: "Monitor"):
+        self.app = app
+        self.frame = tk.Frame(parent, bg=PANEL, padx=12, pady=10)
+        self.edit: str | None = None
+        self._loading = False
+        self._mode = "aus"
+        self._pending: dict[str, float] = {}
+        self._loaded: dict[str, float] = {}
+        self._save_job = None
+        self._profiles: list[str] = []
+        self.vars: dict[str, tk.DoubleVar] = {}
+        self.vals: dict[str, tk.Label] = {}
+        self.fmt: dict[str, tuple[float, str, float]] = {}
+        f = self.frame
+
+        # Profilauswahl
+        row = tk.Frame(f, bg=PANEL)
+        row.pack(fill="x")
+        tk.Label(row, text="Profil", bg=PANEL, fg=TEXT,
+                 font=("Segoe UI", 11, "bold")).pack(side="left")
+        self.choice = tk.StringVar()
+        self.menu = tk.OptionMenu(row, self.choice, "")
+        self.menu.configure(bg=BODY, fg=TEXT, activebackground=ON,
+                            activeforeground="white", relief="flat",
+                            highlightthickness=0, font=("Segoe UI", 10),
+                            width=12)
+        self.menu["menu"].configure(bg=BODY, fg=TEXT, activebackground=ON)
+        self.menu.pack(side="left", padx=8)
+        for text, cmd in (("Neu", self._new), ("Loeschen", self._delete)):
+            tk.Button(row, text=text, command=cmd, bg=BODY, fg=TEXT,
+                      activebackground=ON, activeforeground="white",
+                      relief="flat", padx=8, font=("Segoe UI", 9)
+                      ).pack(side="left", padx=2)
+
+        self.auto = tk.BooleanVar()
+        tk.Checkbutton(f, text="Automatisch pro Spiel umschalten",
+                       variable=self.auto, command=self._toggle_auto,
+                       bg=PANEL, fg=TEXT, selectcolor=BODY,
+                       activebackground=PANEL, activeforeground=TEXT,
+                       font=("Segoe UI", 9)).pack(anchor="w", pady=(6, 0))
+
+        # Trigger-Modus
+        self._section("Trigger-Modus")
+        modes = tk.Frame(f, bg=PANEL)
+        modes.pack(fill="x")
+        self.mode_btns = {}
+        for key, name in triggers.MODES.items():
+            b = tk.Button(modes, text=name, relief="flat", padx=6,
+                          font=("Segoe UI", 9), bd=0,
+                          command=lambda k=key: self._set_mode(k))
+            b.pack(side="left", padx=(0, 4))
+            self.mode_btns[key] = b
+
+        for title, items in self.SLIDERS.items():
+            self._section(title)
+            grid = tk.Frame(f, bg=PANEL)
+            grid.pack(fill="x")
+            grid.columnconfigure(1, weight=1)
+            for r, spec in enumerate(items):
+                self._slider(grid, r, *spec)
+            if title == "Sticks":
+                self.measure_btn = tk.Button(
+                    grid, text="Reichweite messen", command=self._measure,
+                    bg=BODY, fg=TEXT, activebackground=ON,
+                    activeforeground="white", relief="flat", padx=8,
+                    font=("Segoe UI", 9))
+                self.measure_btn.grid(row=len(items), column=0,
+                                      columnspan=3, sticky="w", pady=(4, 0))
+
+        self._section("Spiele (Teil des Exe-Namens, mit Komma)")
+        self.games = tk.StringVar()
+        entry = tk.Entry(f, textvariable=self.games, bg=BODY, fg=TEXT,
+                         insertbackground=TEXT, relief="flat",
+                         font=("Segoe UI", 9))
+        entry.pack(fill="x", ipady=3)
+        entry.bind("<Return>", lambda _: self._save_games())
+        entry.bind("<FocusOut>", lambda _: self._save_games())
+
+    # --- Aufbau ---------------------------------------------------------
+
+    def _section(self, title: str) -> None:
+        tk.Label(self.frame, text=title, bg=PANEL, fg=DIM,
+                 font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(10, 2))
+
+    def _slider(self, grid, row, key, label, lo, hi, step, factor, unit):
+        tk.Label(grid, text=label, bg=PANEL, fg=TEXT, font=("Segoe UI", 9),
+                 width=17, anchor="w").grid(row=row, column=0, sticky="w")
+        var = tk.DoubleVar()
+        tk.Scale(grid, from_=lo, to=hi, resolution=step, orient="horizontal",
+                 variable=var, showvalue=False, length=150, width=12,
+                 sliderlength=14, bg=ON, fg=TEXT, troughcolor=BODY,
+                 activebackground="#6f9dff",
+                 highlightthickness=0, bd=0, sliderrelief="flat",
+                 command=lambda _v, k=key: self._changed(k)
+                 ).grid(row=row, column=1, sticky="ew", padx=6)
+        val = tk.Label(grid, text="", bg=PANEL, fg=TEXT, width=5,
+                       font=("Consolas", 9), anchor="e")
+        val.grid(row=row, column=2)
+        self.vars[key], self.vals[key] = var, val
+        self.fmt[key] = (factor, unit, step)
+
+    def _show_value(self, key: str) -> None:
+        factor, unit, step = self.fmt[key]
+        v = self.vars[key].get() * factor
+        text = f"{v:.0f}{unit}" if step >= 1 or factor == 100 else f"{v:.1f}"
+        self.vals[key].configure(text=text)
+
+    # --- Abgleich mit settings.json -------------------------------------
+
+    def sync(self, data: dict) -> None:
+        """Zieht Aenderungen von aussen nach (Tray, anderes Fenster)."""
+        names = list(data["profiles"])
+        if names != self._profiles:
+            self._profiles = names
+            m = self.menu["menu"]
+            m.delete(0, "end")
+            for n in names:
+                m.add_command(label=n, command=lambda n=n: self._select(n))
+        self.auto.set(data["auto_game"])
+        if self._pending:
+            return          # nicht ueberschreiben, was gerade gespeichert wird
+        if data["active"] != self.edit or not self._same(data):
+            self._load(data["active"], data)
+
+    def _same(self, data: dict) -> bool:
+        p = data["profiles"].get(self.edit, {})
+        # Das Spiele-Feld zaehlt nicht mit - sonst wuerde Getipptes
+        # ueberschrieben, bevor es gespeichert ist.
+        same = all(abs(float(p[k]) - self.vars[k].get()) < 1e-6
+                   for k in self.vars)
+        return same and p["triggers"] == self._mode
+
+    def _load(self, name: str, data: dict) -> None:
+        self._loading = True
+        self.edit = name
+        self.choice.set(name)
+        p = data["profiles"][name]
+        for k, var in self.vars.items():
+            var.set(float(p[k]))
+            self._loaded[k] = var.get()
+            self._show_value(k)
+        self._show_mode(p["triggers"])
+        self.games.set(", ".join(p["games"]))
+        self._loading = False
+
+    # --- Aktionen -------------------------------------------------------
+
+    def _select(self, name: str) -> None:
+        data = settings.update(active=name)
+        self._load(name, data)
+
+    def _changed(self, key: str) -> None:
+        self._show_value(key)
+        if self._loading or self.edit is None:
+            return
+        v = self.vars[key].get()
+        # Tk meldet auch per Programm gesetzte Werte - die nicht zurueckschreiben.
+        if abs(v - self._loaded.get(key, float("nan"))) < 1e-9:
+            return
+        self._loaded[key] = v
+        self._pending[key] = v
+        # Beim Ziehen nicht bei jedem Pixel schreiben.
+        if self._save_job:
+            self.frame.after_cancel(self._save_job)
+        self._save_job = self.frame.after(250, self._flush)
+
+    def _flush(self) -> None:
+        self._save_job = None
+        changes, self._pending = self._pending, {}
+        if self.edit and changes:
+            settings.update_profile(self.edit, **changes)
+
+    def _set_mode(self, mode: str) -> None:
+        self._show_mode(mode)
+        if self.edit:
+            settings.update_profile(self.edit, triggers=mode)
+
+    def _show_mode(self, mode: str) -> None:
+        self._mode = mode
+        racing = mode in ("racing", "racing_live")
+        for key, b in self.mode_btns.items():
+            on = key == mode
+            b.configure(bg=ON if on else BODY, fg="white" if on else TEXT,
+                        activebackground=ON, activeforeground="white")
+        # Bremse/Gas-Regler gelten nur fuer die Racing-Modi.
+        for k in ("brake_start", "brake_force", "gas_force"):
+            self.vals[k].configure(fg=TEXT if racing else OFF)
+
+    def _toggle_auto(self) -> None:
+        settings.update(auto_game=self.auto.get())
+
+    def _save_games(self) -> None:
+        if not self.edit:
+            return
+        pats = [g.strip().lower() for g in self.games.get().split(",")
+                if g.strip()]
+        settings.update_profile(self.edit, games=pats)
+
+    def _new(self) -> None:
+        name = simpledialog.askstring(
+            "Neues Profil", "Name (Kopie des aktuellen Profils):",
+            parent=self.frame)
+        if not name or not name.strip():
+            return
+        name = name.strip()
+        data = settings.load()
+        if name in data["profiles"]:
+            messagebox.showinfo("Profil", f'"{name}" gibt es schon.')
+            return
+        base = dict(data["profiles"].get(self.edit, {}))
+        base["games"] = []
+        data["profiles"][name] = base
+        data["active"] = name
+        settings.save(data)
+        self.sync(settings.load())
+
+    def _delete(self) -> None:
+        data = settings.load()
+        if len(data["profiles"]) <= 1 or self.edit not in data["profiles"]:
+            messagebox.showinfo("Profil", "Das letzte Profil bleibt.")
+            return
+        if not messagebox.askyesno("Profil loeschen",
+                                   f'Profil "{self.edit}" loeschen?'):
+            return
+        del data["profiles"][self.edit]
+        data["active"] = next(iter(data["profiles"]))
+        settings.save(data)
+        self.sync(settings.load())
+
+    def _measure(self) -> None:
+        self.measure_btn.configure(state="disabled", text="misst ...")
+
+        def done(rec):
+            self.measure_btn.configure(state="normal",
+                                       text="Reichweite messen")
+            if rec is not None:
+                self.vars["stick_outer"].set(rec)
+                self._changed("stick_outer")
+
+        self.app.measure_reach(done)
+
+
 class Monitor:
     W, H = 560, 330
 
@@ -107,14 +379,25 @@ class Monitor:
         self.battery = BatteryWatcher()
         self.slot: int | None = None
         self._last_scan = 0.0
+        self._last_games = 0.0
         self._link = None
         self._running = False
+        self._game: tuple[str, str] | None = None
+        self._measure_msg: str | None = None
 
         self._build_status()
-        self.cv = tk.Canvas(self.root, width=self.W, height=self.H, bg=BG,
+        body = tk.Frame(self.root, bg=BG)
+        body.pack(fill="both", padx=12, pady=(4, 12))
+        left = tk.Frame(body, bg=BG)
+        left.pack(side="left", anchor="n")
+        self.cv = tk.Canvas(left, width=self.W, height=self.H, bg=BG,
                             highlightthickness=0)
-        self.cv.pack(padx=12, pady=(4, 4))
-        self._build_profiles()
+        self.cv.pack()
+        self.active_lbl = tk.Label(left, text="", bg=BG, fg=DIM,
+                                   font=("Segoe UI", 9), anchor="w")
+        self.active_lbl.pack(fill="x", pady=(6, 0))
+        self.panel = ProfilePanel(body, self)
+        self.panel.frame.pack(side="left", fill="y", padx=(12, 0))
         self._draw_static()
         self.root.protocol("WM_DELETE_WINDOW", self._close)
 
@@ -175,42 +458,51 @@ class Monitor:
         else:
             self._lamp("xp", WARN if self._running else BAD, "kein Pad")
 
-        # Auch im Tray umschaltbar - Anzeige nachziehen.
-        self._show_profile(settings.load()["trigger_profile"])
-
         if self._running:
             self.start_btn.pack_forget()
             self.start_btn.configure(text="Bruecke starten", state="normal")
         elif not self.start_btn.winfo_ismapped():
             self.start_btn.pack(side="right", padx=10)
 
-    # --- Trigger-Profile ------------------------------------------------
+        data = settings.load()
+        now = time.time()
+        if now - self._last_games > 2.0:
+            self._last_games = now
+            self._game = games.detect(data)
+        eff = settings.effective(data, self._game[1] if self._game else None)
+        if self._game and eff == self._game[1]:
+            self.active_lbl.configure(
+                text=f"Aktiv: {eff}  (automatisch - {self._game[0]} laeuft)",
+                fg=OK)
+        else:
+            self.active_lbl.configure(text=f"Aktiv: {eff}", fg=DIM)
+        self.panel.sync(data)
 
-    def _build_profiles(self) -> None:
-        bar = tk.Frame(self.root, bg=PANEL)
-        bar.pack(fill="x", padx=12, pady=(0, 12))
-        tk.Label(bar, text="Trigger L2/R2:", bg=PANEL, fg=DIM,
-                 font=("Segoe UI", 9)).pack(side="left", padx=(10, 6), pady=8)
-        self.profile_btns = {}
-        for key, prof in triggers.PROFILES.items():
-            b = tk.Button(bar, text=prof.name, relief="flat", padx=10,
-                          font=("Segoe UI", 9), bd=0,
-                          command=lambda k=key: self._set_profile(k))
-            b.pack(side="left", padx=3, pady=8)
-            self.profile_btns[key] = b
-        self._show_profile(settings.load()["trigger_profile"])
+    # --- Reichweite messen ----------------------------------------------
 
-    def _set_profile(self, key: str) -> None:
-        settings.save(trigger_profile=key)
-        self._show_profile(key)
+    def measure_reach(self, done) -> None:
+        def progress(rest, lc, rc):
+            self._measure_msg = (
+                f"Beide Sticks am Anschlag kreisen - noch {rest:3.1f}s   "
+                f"L {lc:4.0%}  R {rc:4.0%}")
 
-    def _show_profile(self, current: str) -> None:
-        for key, b in self.profile_btns.items():
-            on = key == current
-            b.configure(bg=ON if on else BODY, fg="white" if on else TEXT,
-                        activebackground=ON, activeforeground="white")
+        def work():
+            try:
+                left, right = rangecheck.measure(progress=progress)
+                rec = rangecheck.recommend(left, right)
+            except Exception as e:  # Controller weg o. ae.
+                rec, left, right = None, None, None
+                self._measure_msg = f"Messung fehlgeschlagen: {e}"
+            if rec is None and left is not None:
+                self._measure_msg = ("Nicht alle Richtungen erreicht - "
+                                     "nochmal ganz rundherum.")
+            elif rec is not None:
+                self._measure_msg = f"Aeussere Zone auf {rec:.0%} gesetzt."
+            self.root.after(0, lambda: done(rec))
+            time.sleep(4)
+            self._measure_msg = None
 
-    # --- Schema ---------------------------------------------------------
+        threading.Thread(target=work, daemon=True).start()
 
     def _draw_static(self) -> None:
         c = self.cv
@@ -314,7 +606,9 @@ class Monitor:
                             else EDGE)
             c.itemconfigure(val, text=f"{sx:+6d} {sy:+6d}" if x else "")
 
-        if x is None:
+        if self._measure_msg:
+            msg = self._measure_msg
+        elif x is None:
             if not self._running:
                 msg = "Bruecke ist aus - oben starten."
             elif not self._link:

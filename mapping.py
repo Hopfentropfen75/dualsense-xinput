@@ -53,6 +53,15 @@ class Config:
     # Radiale Deadzone in Stick-Einheiten (0..1), gegen Drift.
     left_deadzone: float = 0.08
     right_deadzone: float = 0.08
+    # Aeussere Zone: ab (1 - outer) gilt der Stick als voll ausgelenkt.
+    # Faengt Sticks ab, die den Rand nicht ganz erreichen.
+    outer_deadzone: float = 0.0
+    # Direkt hinter der Deadzone auf diesen Wert springen - gleicht die
+    # Deadzone aus, die das Spiel selbst noch einmal abzieht.
+    anti_deadzone: float = 0.0
+    # Trigger: Leerweg (0..1) und Kurve (1 = linear, >1 = feiner am Anfang).
+    trigger_deadzone: float = 0.0
+    trigger_curve: float = 1.0
     # Ab welchem Rohwert ein Analogtrigger als Klick zaehlt.
     trigger_threshold: int = 30
     # Stick-Mittelpunkte; per calibrate() aus der Ruhelage bestimmt.
@@ -89,16 +98,28 @@ def _axis(raw: int, center: int) -> float:
     return (raw - center) / center if center else 0.0
 
 
-def _apply_deadzone(x: float, y: float, dz: float) -> tuple[float, float]:
+def _apply_deadzone(x: float, y: float, dz: float, outer: float = 0.0,
+                    anti: float = 0.0) -> tuple[float, float]:
     """Radiale Deadzone: skaliert den Rest auf den vollen Bereich, damit
     knapp ausserhalb der Zone kein Sprung entsteht."""
     mag = math.hypot(x, y)
-    if mag <= dz:
+    if mag <= dz or mag == 0.0:
         return 0.0, 0.0
-    if mag == 0.0:
-        return 0.0, 0.0
-    scaled = min((mag - dz) / (1.0 - dz), 1.0)
+    span = max(1.0 - dz - outer, 1e-6)
+    scaled = min((mag - dz) / span, 1.0)
+    if anti > 0.0:
+        scaled = anti + (1.0 - anti) * scaled
     return x / mag * scaled, y / mag * scaled
+
+
+def _trigger(raw: int, dz: float, curve: float) -> int:
+    if dz <= 0.0 and curve == 1.0:
+        return raw
+    v = raw / 255.0
+    if v <= dz:
+        return 0
+    v = (v - dz) / (1.0 - dz)
+    return min(255, round(255 * v ** curve))
 
 
 def _to_i16(v: float) -> int:
@@ -112,12 +133,12 @@ def map_state(st: State, cfg: Config | None = None) -> XPad:
     lx, ly = _apply_deadzone(
         _axis(st.lx, cfg.center["lx"]),
         _axis(st.ly, cfg.center["ly"]),
-        cfg.left_deadzone,
+        cfg.left_deadzone, cfg.outer_deadzone, cfg.anti_deadzone,
     )
     rx, ry = _apply_deadzone(
         _axis(st.rx, cfg.center["rx"]),
         _axis(st.ry, cfg.center["ry"]),
-        cfg.right_deadzone,
+        cfg.right_deadzone, cfg.outer_deadzone, cfg.anti_deadzone,
     )
 
     # DualSense zaehlt Y nach unten, XInput nach oben.
@@ -126,7 +147,8 @@ def map_state(st: State, cfg: Config | None = None) -> XPad:
 
     out.lx, out.ly = _to_i16(lx), _to_i16(ly)
     out.rx, out.ry = _to_i16(rx), _to_i16(ry)
-    out.lt, out.rt = st.l2, st.r2
+    out.lt = _trigger(st.l2, cfg.trigger_deadzone, cfg.trigger_curve)
+    out.rt = _trigger(st.r2, cfg.trigger_deadzone, cfg.trigger_curve)
 
     mask = 0
     for name in st.buttons:

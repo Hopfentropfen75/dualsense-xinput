@@ -8,12 +8,14 @@ from __future__ import annotations
 
 import argparse
 import gc
+import json
 import sys
 import threading
 import time
 
 import vgamepad as vg
 
+import games
 import settings
 import triggers
 import xinput_ref as xr
@@ -25,8 +27,19 @@ from output import OutputChannel
 ACTIVE_COLOR = (0, 60, 255)
 
 
+# Config-Felder, die aus dem Profil kommen.
+PROFILE_FIELDS = {
+    "stick_deadzone": ("left_deadzone", "right_deadzone"),
+    "stick_outer": ("outer_deadzone",),
+    "anti_deadzone": ("anti_deadzone",),
+    "trigger_deadzone": ("trigger_deadzone",),
+    "trigger_curve": ("trigger_curve",),
+}
+
+
 class Bridge:
-    def __init__(self, cfg: Config | None = None, quiet: bool = False):
+    def __init__(self, cfg: Config | None = None, quiet: bool = False,
+                 pinned: set[str] | None = None):
         self.ds = DualSense()
         self.ds.enable_full_bt()
         self.cfg = cfg or Config()
@@ -40,12 +53,19 @@ class Bridge:
         # Von aussen setzbar (Tray-Menue), wird im Loop abgearbeitet.
         self.recalibrate_requested = False
 
-        # Trigger-Profil; kommt aus settings.json und wird im Loop neu
-        # gelesen, sobald sich die Datei aendert.
-        self.profile = triggers.get(triggers.DEFAULT)
-        self._settings_mtime = -1.0
-        self._settings_check = 0.0
+        # Profil: ein Hintergrund-Thread beobachtet settings.json und die
+        # laufenden Spiele und legt das Ergebnis in _wanted ab. Der Loop
+        # vergleicht nur und uebernimmt - keine Datei- oder Prozess-
+        # abfragen im Eingabepfad.
+        self.pinned = pinned or set()      # per Kommandozeile festgelegt
+        self.profile_name = "?"
+        self.game: str | None = None
+        self.trig = triggers.build({})
+        self.rumble_gain = 1.0
+        self._wanted: tuple[str, str] | None = None
+        self._applied: tuple[str, str] | None = None
         self._triggers_sent: tuple[bytes, bytes] | None = None
+        self._closing = threading.Event()
 
         # Rumble kommt aus einem ViGEm-Thread; das HID-Handle gehoert dem
         # Hauptthread, also hier nur merken und dort senden.
@@ -118,32 +138,60 @@ class Bridge:
     def _with_triggers(self, rep):
         """Haengt die Trigger-Effekte an, aber nur wenn sie sich geaendert
         haben - sonst wuerde jeder Rumble-Report sie neu anstossen."""
-        eff = self.profile.effects(*self._rumble)
+        eff = self.trig.effects(*self._rumble)
         if eff != self._triggers_sent:
             self._triggers_sent = eff
             rep.triggers(*eff)
         return rep
 
+    def _watch(self) -> None:
+        """Hintergrund: welches Profil soll gerade gelten?"""
+        last_m, data = None, None
+        while not self._closing.is_set():
+            try:
+                m = settings.mtime()
+                if m != last_m:
+                    last_m, data = m, settings.load()
+                hit = games.detect(data)
+                self.game = hit[0] if hit else None
+                name = settings.effective(data, hit[1] if hit else None)
+                wanted = (name, json.dumps(data["profiles"][name],
+                                           sort_keys=True))
+                if wanted != self._wanted:
+                    self._wanted = wanted
+            except Exception:
+                pass
+            self._closing.wait(1.5)
+
     def _check_settings(self) -> None:
-        now = time.time()
-        if now - self._settings_check < 0.5 or self.out is None:
+        wanted = self._wanted
+        if wanted is None or wanted is self._applied or self.out is None:
             return
-        self._settings_check = now
-        m = settings.mtime()
-        if m == self._settings_mtime:
-            return
-        self._settings_mtime = m
-        self.profile = triggers.get(settings.load()["trigger_profile"])
+        self._applied = wanted
+        name, raw = wanted
+        p = json.loads(raw)
+        for key, fields in PROFILE_FIELDS.items():
+            for f in fields:
+                if f not in self.pinned:
+                    setattr(self.cfg, f, float(p[key]))
+        self.rumble_gain = float(p["rumble_gain"])
+        self.trig = triggers.build(p)
+        self.profile_name = name
         self._triggers_sent = None
+        self._rumble_dirty = True       # Rumble mit neuer Staerke nachziehen
         try:
             self.out.send(self._with_triggers(self.out.new()))
         except OSError:
             pass
+        if not self.quiet:
+            print(f"\nProfil: {name}"
+                  f"{f' (erkannt: {self.game})' if self.game else ''}")
 
     def _flush_rumble(self) -> None:
         if not self._rumble_dirty or self.out is None:
             return
-        large, small = self._rumble
+        g = self.rumble_gain
+        large, small = (min(255, round(v * g)) for v in self._rumble)
         try:
             self.out.send(self._with_triggers(
                 self.out.new().rumble(large, small).lightbar(*ACTIVE_COLOR)))
@@ -153,6 +201,7 @@ class Bridge:
 
     def run(self, duration: float | None = None,
             stop: threading.Event | None = None) -> None:
+        threading.Thread(target=self._watch, daemon=True).start()
         self.calibrate()
         self._detect_slot()
         self._prime()
@@ -214,6 +263,7 @@ class Bridge:
             self.close()
 
     def close(self) -> None:
+        self._closing.set()
         try:
             self.pad.reset()
             self.pad.update()
@@ -248,13 +298,17 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="DualSense als Xbox-Controller")
     ap.add_argument("--seconds", type=float, default=None,
                     help="nach N Sekunden automatisch beenden")
-    ap.add_argument("--deadzone", type=float, default=0.08)
+    ap.add_argument("--deadzone", type=float, default=None,
+                    help="Stick-Deadzone fest vorgeben statt aus dem Profil")
     ap.add_argument("--quiet", action="store_true")
     a = ap.parse_args()
 
-    cfg = Config(left_deadzone=a.deadzone, right_deadzone=a.deadzone)
+    cfg, pinned = Config(), set()
+    if a.deadzone is not None:
+        cfg.left_deadzone = cfg.right_deadzone = a.deadzone
+        pinned = {"left_deadzone", "right_deadzone"}
     try:
-        Bridge(cfg, quiet=a.quiet).run(duration=a.seconds)
+        Bridge(cfg, quiet=a.quiet, pinned=pinned).run(duration=a.seconds)
     except RuntimeError as e:
         print(f"Fehler: {e}", file=sys.stderr)
         return 1

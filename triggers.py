@@ -55,14 +55,20 @@ def vibration(position: int, amplitude: int, frequency: int) -> bytes:
                   max(1, min(255, frequency)), 0])
 
 
-# Unter dieser Rumble-Staerke bleibt der Trigger beim festen Profil.
+# Unter dieser Rumble-Staerke bleibt der Trigger beim festen Effekt.
 LIVE_THRESHOLD = 40
 LIVE_FREQUENCY = 40
 
+MODES: dict[str, str] = {
+    "aus": "Aus",
+    "racing": "Racing",
+    "racing_live": "Racing + Rumble",
+    "shooter": "Shooter",
+}
+
 
 @dataclass(frozen=True)
-class Profile:
-    name: str
+class Setup:
     left: bytes
     right: bytes
     # Gas-Trigger vibriert mit, wenn das Spiel rumblet (Durchdrehen,
@@ -81,19 +87,17 @@ class Profile:
         return self.left, vibration(1, amp, LIVE_FREQUENCY)
 
 
-# Racing: Bremse (L2) mit spuerbarem Druckpunkt nach einem Drittel Weg,
-# Gas (R2) nur leicht gedaempft, damit sich fein dosieren laesst.
-_BRAKE = feedback(3, 6)
-_GAS = feedback(1, 2)
+def build(p: dict) -> Setup:
+    """Trigger-Effekte aus einem Profil (siehe settings.PROFILE_DEFAULTS).
 
-PROFILES: dict[str, Profile] = {
-    "aus": Profile("Aus", off(), off()),
-    "racing": Profile("Racing", _BRAKE, _GAS),
-    "racing_live": Profile("Racing + Rumble", _BRAKE, _GAS, live=True),
-    "shooter": Profile("Shooter", feedback(2, 3), weapon(4, 6, 6)),
-}
-DEFAULT = "aus"
-
-
-def get(key: str) -> Profile:
-    return PROFILES.get(key, PROFILES[DEFAULT])
+    Racing: Bremse (L2) mit Druckpunkt ab `brake_start`, Gas (R2) nur
+    leicht gedaempft, damit es sich fein dosieren laesst."""
+    mode = p.get("triggers", "aus")
+    if mode in ("racing", "racing_live"):
+        brake = feedback(int(p["brake_start"]), int(p["brake_force"]))
+        gas = (feedback(1, int(p["gas_force"])) if int(p["gas_force"]) > 0
+               else off())
+        return Setup(brake, gas, live=mode == "racing_live")
+    if mode == "shooter":
+        return Setup(feedback(2, 3), weapon(4, 6, 6))
+    return Setup(off(), off())

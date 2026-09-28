@@ -15,7 +15,6 @@ from pathlib import Path
 import pystray
 
 import settings
-import triggers
 from battery import Status, make_icon, windows_light_taskbar
 from bridge import Bridge
 from mapping import Config
@@ -43,9 +42,7 @@ class App:
                 pystray.Menu.SEPARATOR,
                 pystray.MenuItem("Anzeige oeffnen", self._open_monitor,
                                  default=True),
-                pystray.MenuItem("Trigger", pystray.Menu(*(
-                    self._profile_item(k, p)
-                    for k, p in triggers.PROFILES.items()))),
+                pystray.MenuItem("Profil", pystray.Menu(self._profile_items)),
                 pystray.MenuItem("Neu kalibrieren", self._recalibrate),
                 pystray.MenuItem("Beenden", self._quit),
             ),
@@ -56,9 +53,11 @@ class App:
             return f"DualSense - {self.error}"
         if not self.status.online:
             return "DualSense - nicht verbunden"
-        slot = self.bridge.slot if self.bridge else None
-        where = f"XInput-Slot {slot}" if slot is not None else "aktiv"
-        return f"{self.status.text()} - {where}"
+        b = self.bridge
+        slot = b.slot if b else None
+        where = f"Slot {slot + 1}" if slot is not None else "aktiv"
+        prof = f" - {b.profile_name}" if b else ""
+        return f"{self.status.text()} - {where}{prof}"
 
     def _quit(self, *_):
         self._stop.set()
@@ -73,13 +72,22 @@ class App:
                           str(here / "monitor.py")], cwd=str(here))
 
     @staticmethod
-    def _profile_item(key: str, prof: triggers.Profile):
-        # Die Bruecke merkt die geaenderte settings.json und schaltet um.
-        return pystray.MenuItem(
-            prof.name,
-            lambda *_: settings.save(trigger_profile=key),
-            checked=lambda _: settings.load()["trigger_profile"] == key,
-            radio=True)
+    def _profile_items():
+        """Dynamisch, damit im Fenster angelegte Profile auftauchen. Die
+        Bruecke merkt die geaenderte settings.json und schaltet um."""
+        def item(name):
+            return pystray.MenuItem(
+                name,
+                lambda *_: settings.update(active=name),
+                checked=lambda _: settings.load()["active"] == name,
+                radio=True)
+        yield from (item(n) for n in settings.load()["profiles"])
+        yield pystray.Menu.SEPARATOR
+        yield pystray.MenuItem(
+            "Automatisch pro Spiel",
+            lambda *_: settings.update(
+                auto_game=not settings.load()["auto_game"]),
+            checked=lambda _: settings.load()["auto_game"])
 
     def _recalibrate(self, *_):
         # Die Bruecke laeuft weiter; nur die Mittelpunkte werden neu gemessen.

@@ -15,7 +15,7 @@ dabei liegen lassen. Danach ist er als XInput-Gerät aktiv.
 
 ```
 python bridge.py --seconds 60     # automatisch beenden
-python bridge.py --deadzone 0.12  # groessere Deadzone bei starkem Drift
+python bridge.py --deadzone 0.12  # Deadzone fest vorgeben statt aus dem Profil
 python bridge.py --quiet          # ohne Live-Anzeige
 ```
 
@@ -30,19 +30,39 @@ die Eingaben als Schema - so, wie ein Spiel sie ueber XInput sieht. Laeuft
 die Bruecke nicht, laesst sie sich dort starten. Aus dem Tray per
 Doppelklick aufs Symbol oder "Anzeige oeffnen".
 
-## Adaptive Trigger
+## Profile und Einstellungen
 
-XInput kennt keinen Trigger-Widerstand, Spiele koennen ihn ueber den
-virtuellen Pad also nicht steuern. Die Bruecke setzt ihn selbst - Profil
-im Tray-Menue unter "Trigger" oder im Anzeigefenster waehlen:
+Alles, was sich pro Spiel unterscheiden soll, steckt in einem Profil:
+Trigger-Widerstand, Stick-Deadzones, Trigger-Kurve und Rumble-Staerke.
+Mitgeliefert sind **Standard**, **Forza** und **Shooter**; im
+Anzeigefenster lassen sich Profile anlegen, loeschen und per Regler
+einstellen. Aenderungen wirken nach ein bis zwei Sekunden, ohne Neustart.
 
-- **Racing** - L2 (Bremse) mit Druckpunkt nach einem Drittel, R2 (Gas) leicht
-- **Racing + Rumble** - dazu vibriert R2 mit, wenn das Spiel rumblet
-- **Shooter** - R2 mit Abzugs-Druckpunkt
-- **Aus**
+**Automatisch pro Spiel:** Jedes Profil hat eine Liste von Teilen des
+Exe-Namens (Forza: `forzahorizon, forzamotorsport`). Laeuft ein passendes
+Programm, schaltet die Bruecke von selbst um. Abschaltbar im Fenster und
+im Tray-Menue unter "Profil".
 
-Die Auswahl landet in `settings.json` und wirkt sofort. Beim Beenden
-nimmt die Bruecke den Widerstand zurueck.
+| Einstellung | Wirkung |
+|---|---|
+| Trigger-Modus | Racing: L2 als Bremse mit Druckpunkt, R2 leicht gedaempft. Racing + Rumble: zusaetzlich vibriert R2 mit. Shooter: Abzugs-Druckpunkt auf R2. |
+| Bremse: Druckpunkt / Kraft | Ab welcher Zone (0-8) und wie stark (1-8) L2 dagegenhaelt |
+| Gas: Widerstand | Grundwiderstand auf R2 (0 = keiner) |
+| Deadzone innen | Gegen Stickdrift - siehe `driftcheck.py` |
+| Aeussere Zone | Ab hier gilt der Stick als voll ausgelenkt. "Reichweite messen" bestimmt den Wert: beide Sticks ein paar Mal am Anschlag kreisen lassen. |
+| Anti-Deadzone | Springt direkt hinter der Deadzone auf diesen Wert und gleicht so die Deadzone des Spiels aus. Nur nutzen, wenn die Lenkung um die Mitte traege wirkt. |
+| Trigger: Leerweg / Kurve | Leerweg gegen Antippen; Kurve > 1 macht den Anfang feiner (Gas dosieren) |
+| Vibration: Staerke | Verstaerkt oder daempft das Rumble des Spiels |
+
+XInput kennt keinen Trigger-Widerstand - Spiele koennen ihn ueber den
+virtuellen Pad nicht steuern, deshalb setzt ihn die Bruecke selbst. Beim
+Beenden nimmt sie ihn zurueck. Gespeichert wird alles in `settings.json`.
+
+Die Reichweite laesst sich auch im Terminal messen:
+
+```
+python rangecheck.py
+```
 
 ## Batterieanzeige
 

@@ -5,23 +5,23 @@ Rennspiele (Forza Horizon) sortiert.
 
 ## Eingabe
 
-- [ ] **Aeussere Deadzone / Stick-Reichweite kalibrieren** - viele Sticks
+- [x] **Aeussere Deadzone / Stick-Reichweite kalibrieren** - viele Sticks
       erreichen 0/255 nicht ganz, besonders diagonal. Dann kommt nie voller
       Lenkeinschlag an. Maximalwerte beim Kreisen messen und darauf skalieren.
-- [ ] **Anti-Deadzone** - die Bruecke zieht 8 % ab, das Spiel oft nochmal
+- [x] **Anti-Deadzone** - die Bruecke zieht 8 % ab, das Spiel oft nochmal
       20-25 %. Direkt hinter der eigenen Zone auf die Spielschwelle springen,
       damit der Stick um die Mitte nicht traege wirkt.
-- [ ] **Trigger-Deadzone und -Kurve** - L2/R2 gehen roh 1:1 durch. Kleine
+- [x] **Trigger-Deadzone und -Kurve** - L2/R2 gehen roh 1:1 durch. Kleine
       Zone gegen Antippen, optional progressive Kurve fuers Gas.
 - [ ] **Stick-Kurven** - linear / progressiv fuer feines Lenken.
-- [ ] **Einstellungen im Anzeigefenster** - Deadzones und Kurven per Regler
+- [x] **Einstellungen im Anzeigefenster** - Deadzones und Kurven per Regler
       statt per Kommandozeile, gespeichert in `settings.json`.
 
 ## Feedback
 
-- [ ] **Trigger-Profile feinjustieren** - Druckpunkt und Staerke der Bremse
+- [x] **Trigger-Profile feinjustieren** - Druckpunkt und Staerke der Bremse
       per Regler, eigene Profile anlegen.
-- [ ] **Rumble-Verstaerker** - Faktor fuer die Motorstaerke, falls die
+- [x] **Rumble-Verstaerker** - Faktor fuer die Motorstaerke, falls die
       Emulation zu schwach wirkt.
 - [ ] **Live-Trigger ausbauen** - Bremse bei starkem Rumble pulsieren lassen
       (ABS-Gefuehl), Frequenz aus dem leichten Motor ableiten.
@@ -30,7 +30,7 @@ Rennspiele (Forza Horizon) sortiert.
 
 ## Komfort
 
-- [ ] **Profil pro Spiel** - laufenden Prozess erkennen (z. B.
+- [x] **Profil pro Spiel** - laufenden Prozess erkennen (z. B.
       `ForzaHorizon6.exe`) und automatisch auf "Racing" schalten.
 - [ ] **Autostart mit Windows** - Schalter im Tray-Menue.
 - [ ] **Physischen DualSense verstecken (HidHide)** - Spiele mit eigener
