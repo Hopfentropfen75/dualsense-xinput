@@ -20,8 +20,10 @@ import settings
 import triggers
 import xinput_ref as xr
 from dualsense import DualSense, State
+from gyro import GyroAim
 from mapping import Config, calibrate, map_state
 from output import OutputChannel
+from telemetry import Telemetry
 
 # Farbe der Lightbar, solange die Bruecke laeuft.
 ACTIVE_COLOR = (0, 60, 255)
@@ -32,9 +34,13 @@ PROFILE_FIELDS = {
     "stick_deadzone": ("left_deadzone", "right_deadzone"),
     "stick_outer": ("outer_deadzone",),
     "anti_deadzone": ("anti_deadzone",),
-    "trigger_deadzone": ("trigger_deadzone",),
-    "trigger_curve": ("trigger_curve",),
+    "l2_deadzone": ("l2_deadzone",),
+    "r2_deadzone": ("r2_deadzone",),
+    "l2_curve": ("l2_curve",),
+    "r2_curve": ("r2_curve",),
 }
+# So oft werden ABS und Durchdrehen neu bewertet.
+FEEDBACK_INTERVAL = 0.01
 
 
 class Bridge:
@@ -61,7 +67,12 @@ class Bridge:
         self.profile_name = "?"
         self.game: str | None = None
         self.trig = triggers.build({})
+        self.prof: dict = {}
         self.rumble_gain = 1.0
+        self.gyro = GyroAim()
+        self.tele: Telemetry | None = None
+        self._pedals = (0, 0)
+        self._status: dict | None = None
         self._wanted: tuple[str, str] | None = None
         self._applied: tuple[str, str] | None = None
         self._triggers_sent: tuple[bytes, bytes] | None = None
@@ -112,6 +123,7 @@ class Bridge:
             for ax in held:
                 centers[ax] = 128
         self.cfg.center = centers
+        self.gyro.calibrate(samples)
         if not self.quiet:
             print(f"Mittelpunkte: {self.cfg.center}  ({len(samples)} Samples)")
 
@@ -138,7 +150,7 @@ class Bridge:
     def _with_triggers(self, rep):
         """Haengt die Trigger-Effekte an, aber nur wenn sie sich geaendert
         haben - sonst wuerde jeder Rumble-Report sie neu anstossen."""
-        eff = self.trig.effects(*self._rumble)
+        eff = self.trig.effects(self._rumble, *self._pedals, self.tele)
         if eff != self._triggers_sent:
             self._triggers_sent = eff
             rep.triggers(*eff)
@@ -159,9 +171,24 @@ class Bridge:
                                            sort_keys=True))
                 if wanted != self._wanted:
                     self._wanted = wanted
+                self._publish(name)
             except Exception:
                 pass
             self._closing.wait(1.5)
+
+    def _publish(self, name: str) -> None:
+        """Status fuers Anzeigefenster - nur schreiben, wenn sich was aendert."""
+        t = self.tele
+        status = {
+            "profile": name,
+            "game": self.game,
+            "telemetry": bool(t and t.fresh),
+            "telemetry_seen": bool(t and t.seen),
+            "telemetry_error": t.error if t else None,
+        }
+        if status != self._status:
+            self._status = status
+            settings.write_status(status)
 
     def _check_settings(self) -> None:
         wanted = self._wanted
@@ -176,6 +203,7 @@ class Bridge:
                     setattr(self.cfg, f, float(p[key]))
         self.rumble_gain = float(p["rumble_gain"])
         self.trig = triggers.build(p)
+        self.prof = p
         self.profile_name = name
         self._triggers_sent = None
         self._rumble_dirty = True       # Rumble mit neuer Staerke nachziehen
@@ -201,6 +229,7 @@ class Bridge:
 
     def run(self, duration: float | None = None,
             stop: threading.Event | None = None) -> None:
+        self.tele = Telemetry(settings.load()["telemetry_port"])
         threading.Thread(target=self._watch, daemon=True).start()
         self.calibrate()
         self._detect_slot()
@@ -220,6 +249,7 @@ class Bridge:
         # Zuletzt an ViGEm gesendeter Zustand. In Ruhe liefert der
         # Controller 1000x/s dasselbe - das muss nicht jedes Mal in den Treiber.
         last_sent: tuple | None = None
+        last_feedback = 0.0
         try:
             while (end is None or time.time() < end) and not (
                     stop is not None and stop.is_set()):
@@ -233,6 +263,8 @@ class Bridge:
                 st = self.ds.poll_latest(timeout_ms=4)
                 if st:
                     x = map_state(st, self.cfg)
+                    self.gyro.apply(st, x, self.prof)
+                    self._pedals = (st.l2, st.r2)
                     key = (x.buttons, x.lt, x.rt, x.lx, x.ly, x.rx, x.ry)
                     if key != last_sent:
                         last_sent = key
@@ -257,6 +289,19 @@ class Bridge:
 
                 self._flush_rumble()
                 self._check_settings()
+
+                # ABS / Durchdrehen: haengt an Pedal und Reifenschlupf, nicht
+                # nur am Rumble - deshalb regelmaessig neu bewerten.
+                if self.trig.live and self.out is not None:
+                    now = time.time()
+                    if now - last_feedback >= FEEDBACK_INTERVAL:
+                        last_feedback = now
+                        rep = self._with_triggers(self.out.new())
+                        if rep.buf[rep._p(0)]:
+                            try:
+                                self.out.send(rep)
+                            except OSError:
+                                pass
         except KeyboardInterrupt:
             pass
         finally:
@@ -264,6 +309,9 @@ class Bridge:
 
     def close(self) -> None:
         self._closing.set()
+        if self.tele:
+            self.tele.close()
+        settings.write_status({})
         try:
             self.pad.reset()
             self.pad.update()

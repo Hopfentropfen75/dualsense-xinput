@@ -45,18 +45,39 @@ im Tray-Menue unter "Profil".
 
 | Einstellung | Wirkung |
 |---|---|
-| Trigger-Modus | Racing: L2 als Bremse mit Druckpunkt, R2 leicht gedaempft. Racing + Rumble: zusaetzlich vibriert R2 mit. Shooter: Abzugs-Druckpunkt auf R2. |
+| Trigger-Modus | Racing: L2 als Bremse mit Druckpunkt, R2 leicht gedaempft. Racing + Feedback: dazu ABS-Pulsieren und Durchdreh-Vibration. Shooter: Abzugs-Druckpunkt auf R2. |
 | Bremse: Druckpunkt / Kraft | Ab welcher Zone (0-8) und wie stark (1-8) L2 dagegenhaelt |
 | Gas: Widerstand | Grundwiderstand auf R2 (0 = keiner) |
+| ABS: Staerke / Frequenz | Wie kraeftig und schnell L2 pulsiert, wenn Raeder blockieren |
+| Durchdrehen | Wie kraeftig R2 vibriert, wenn die Hinterraeder durchdrehen |
 | Deadzone innen | Gegen Stickdrift - siehe `driftcheck.py` |
 | Aeussere Zone | Ab hier gilt der Stick als voll ausgelenkt. "Reichweite messen" bestimmt den Wert: beide Sticks ein paar Mal am Anschlag kreisen lassen. |
 | Anti-Deadzone | Springt direkt hinter der Deadzone auf diesen Wert und gleicht so die Deadzone des Spiels aus. Nur nutzen, wenn die Lenkung um die Mitte traege wirkt. |
-| Trigger: Leerweg / Kurve | Leerweg gegen Antippen; Kurve > 1 macht den Anfang feiner (Gas dosieren) |
+| L2 / R2 Leerweg und Kurve | Getrennt pro Trigger. Leerweg gegen Antippen; Kurve > 1 macht den Anfang feiner. Bremse meist ohne Leerweg, Gas mit etwas. |
 | Vibration: Staerke | Verstaerkt oder daempft das Rumble des Spiels |
+| Gyro | Controller-Drehung steuert den rechten Stick - aus, nur beim Zielen (L2 gehalten) oder immer. Empfindlichkeit, Mindestausschlag und Richtung einstellbar. |
 
 XInput kennt keinen Trigger-Widerstand - Spiele koennen ihn ueber den
 virtuellen Pad nicht steuern, deshalb setzt ihn die Bruecke selbst. Beim
 Beenden nimmt sie ihn zurueck. Gespeichert wird alles in `settings.json`.
+
+### ABS-Gefuehl mit Forza-Telemetrie
+
+Richtig gut wird "Racing + Feedback" mit Forzas Telemetrie: Dann pulsiert
+L2 genau dann, wenn beim Bremsen ein Rad blockiert, und R2 vibriert, wenn
+die Hinterraeder durchdrehen - aus dem echten Reifenschlupf. Im Spiel:
+
+> Einstellungen > HUD und Gameplay > **Data Out** = An,
+> **Data Out IP** = `127.0.0.1`, **Data Out Port** = `5300`
+
+Ob Daten ankommen, zeigt das Anzeigefenster im Tab "Spiele". Ohne
+Telemetrie schaetzt die Bruecke ABS aus kraeftigem Bremsen plus Rumble.
+
+### Gyro-Zielen
+
+Im Shooter-Profil steuert die Drehung des Controllers den rechten Stick,
+solange L2 (Zielen) gehalten wird. Der Gyro wird beim Start zusammen mit
+den Sticks kalibriert - den Controller dabei ruhig liegen lassen.
 
 Die Reichweite laesst sich auch im Terminal messen:
 

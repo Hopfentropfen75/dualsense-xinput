@@ -92,46 +92,72 @@ class BatteryWatcher:
         self._stop.set()
 
 
+GYRO_MODES = {"aus": "Aus", "l2": "Beim Zielen (L2)", "immer": "Immer"}
+
+
 class ProfilePanel:
     """Rechte Spalte: Profil waehlen, anlegen, loeschen und einstellen.
 
     Jede Aenderung landet sofort in settings.json; die Bruecke uebernimmt
     sie innerhalb von etwa zwei Sekunden."""
 
-    # (Schluessel, Beschriftung, von, bis, Schritt, Anzeige-Faktor, Einheit)
-    SLIDERS = {
-        "Trigger-Widerstand": [
-            ("brake_start", "Bremse: Druckpunkt", 0, 8, 1, 1, ""),
-            ("brake_force", "Bremse: Kraft", 1, 8, 1, 1, ""),
-            ("gas_force", "Gas: Widerstand", 0, 8, 1, 1, ""),
+    # Tab -> [(Abschnitt, [(Schluessel, Beschriftung, von, bis, Schritt,
+    #                       Anzeige-Faktor, Einheit)])]
+    LAYOUT = {
+        "Trigger": [
+            ("Widerstand", [
+                ("brake_start", "Bremse: Druckpunkt", 0, 8, 1, 1, ""),
+                ("brake_force", "Bremse: Kraft", 1, 8, 1, 1, ""),
+                ("gas_force", "Gas: Widerstand", 0, 8, 1, 1, ""),
+            ]),
+            ("Feedback (Racing + Feedback)", [
+                ("abs_strength", "ABS: Staerke", 0, 8, 1, 1, ""),
+                ("abs_frequency", "ABS: Frequenz", 5, 60, 1, 1, " Hz"),
+                ("spin_strength", "Durchdrehen", 0, 8, 1, 1, ""),
+            ]),
+            ("Eingabe", [
+                ("l2_deadzone", "L2 Leerweg", 0, 0.20, 0.01, 100, "%"),
+                ("r2_deadzone", "R2 Leerweg", 0, 0.20, 0.01, 100, "%"),
+                ("l2_curve", "L2 Kurve", 0.5, 3.0, 0.1, 1, ""),
+                ("r2_curve", "R2 Kurve", 0.5, 3.0, 0.1, 1, ""),
+            ]),
+            ("Vibration", [
+                ("rumble_gain", "Staerke", 0, 2.0, 0.05, 100, "%"),
+            ]),
         ],
         "Sticks": [
-            ("stick_deadzone", "Deadzone innen", 0, 0.25, 0.01, 100, "%"),
-            ("stick_outer", "Aeussere Zone", 0, 0.25, 0.01, 100, "%"),
-            ("anti_deadzone", "Anti-Deadzone", 0, 0.40, 0.01, 100, "%"),
+            ("Deadzones", [
+                ("stick_deadzone", "Deadzone innen", 0, 0.25, 0.01, 100, "%"),
+                ("stick_outer", "Aeussere Zone", 0, 0.25, 0.01, 100, "%"),
+                ("anti_deadzone", "Anti-Deadzone", 0, 0.40, 0.01, 100, "%"),
+            ]),
         ],
-        "Trigger-Eingabe": [
-            ("trigger_deadzone", "Leerweg", 0, 0.20, 0.01, 100, "%"),
-            ("trigger_curve", "Kurve", 0.5, 3.0, 0.1, 1, ""),
+        "Gyro": [
+            ("Zielen", [
+                ("gyro_sensitivity", "Empfindlichkeit", 0.2, 4.0, 0.1, 1, ""),
+                ("gyro_min", "Mindestausschlag", 0, 0.40, 0.01, 100, "%"),
+            ]),
         ],
-        "Vibration": [
-            ("rumble_gain", "Staerke", 0, 2.0, 0.05, 100, "%"),
-        ],
+        "Spiele": [],
     }
+    CHOICES = {"triggers": triggers.MODES, "gyro": GYRO_MODES}
+    FLAGS = ("gyro_invert_x", "gyro_invert_y")
 
     def __init__(self, parent: tk.Widget, app: "Monitor"):
         self.app = app
         self.frame = tk.Frame(parent, bg=PANEL, padx=12, pady=10)
         self.edit: str | None = None
         self._loading = False
-        self._mode = "aus"
-        self._pending: dict[str, float] = {}
+        self._pending: dict = {}
         self._loaded: dict[str, float] = {}
         self._save_job = None
         self._profiles: list[str] = []
         self.vars: dict[str, tk.DoubleVar] = {}
         self.vals: dict[str, tk.Label] = {}
         self.fmt: dict[str, tuple[float, str, float]] = {}
+        self.choice_btns: dict[str, dict[str, tk.Button]] = {}
+        self.choice_val: dict[str, str] = {}
+        self.flags: dict[str, tk.BooleanVar] = {}
         f = self.frame
 
         # Profilauswahl
@@ -148,60 +174,95 @@ class ProfilePanel:
         self.menu["menu"].configure(bg=BODY, fg=TEXT, activebackground=ON)
         self.menu.pack(side="left", padx=8)
         for text, cmd in (("Neu", self._new), ("Loeschen", self._delete)):
-            tk.Button(row, text=text, command=cmd, bg=BODY, fg=TEXT,
-                      activebackground=ON, activeforeground="white",
-                      relief="flat", padx=8, font=("Segoe UI", 9)
-                      ).pack(side="left", padx=2)
+            self._button(row, text, cmd).pack(side="left", padx=2)
 
-        self.auto = tk.BooleanVar()
-        tk.Checkbutton(f, text="Automatisch pro Spiel umschalten",
-                       variable=self.auto, command=self._toggle_auto,
-                       bg=PANEL, fg=TEXT, selectcolor=BODY,
-                       activebackground=PANEL, activeforeground=TEXT,
-                       font=("Segoe UI", 9)).pack(anchor="w", pady=(6, 0))
+        # Tabs
+        tabbar = tk.Frame(f, bg=PANEL)
+        tabbar.pack(fill="x", pady=(10, 0))
+        self.tab_btns: dict[str, tk.Button] = {}
+        self.tabs: dict[str, tk.Frame] = {}
+        for name in self.LAYOUT:
+            b = tk.Button(tabbar, text=name, relief="flat", bd=0, padx=12,
+                          pady=3, font=("Segoe UI", 9, "bold"),
+                          command=lambda n=name: self._show_tab(n))
+            b.pack(side="left", padx=(0, 2))
+            self.tab_btns[name] = b
+        # Feste Hoehe fuer alle Tabs, sonst springt das Fenster beim Wechseln.
+        self.tab_area = tk.Frame(f, bg=PANEL)
+        self.tab_area.pack(fill="both", expand=True)
+        for name in self.LAYOUT:
+            self.tabs[name] = tk.Frame(self.tab_area, bg=PANEL)
 
-        # Trigger-Modus
-        self._section("Trigger-Modus")
-        modes = tk.Frame(f, bg=PANEL)
-        modes.pack(fill="x")
-        self.mode_btns = {}
-        for key, name in triggers.MODES.items():
-            b = tk.Button(modes, text=name, relief="flat", padx=6,
-                          font=("Segoe UI", 9), bd=0,
-                          command=lambda k=key: self._set_mode(k))
-            b.pack(side="left", padx=(0, 4))
-            self.mode_btns[key] = b
-
-        for title, items in self.SLIDERS.items():
-            self._section(title)
-            grid = tk.Frame(f, bg=PANEL)
-            grid.pack(fill="x")
-            grid.columnconfigure(1, weight=1)
-            for r, spec in enumerate(items):
-                self._slider(grid, r, *spec)
-            if title == "Sticks":
-                self.measure_btn = tk.Button(
-                    grid, text="Reichweite messen", command=self._measure,
-                    bg=BODY, fg=TEXT, activebackground=ON,
-                    activeforeground="white", relief="flat", padx=8,
-                    font=("Segoe UI", 9))
-                self.measure_btn.grid(row=len(items), column=0,
-                                      columnspan=3, sticky="w", pady=(4, 0))
-
-        self._section("Spiele (Teil des Exe-Namens, mit Komma)")
-        self.games = tk.StringVar()
-        entry = tk.Entry(f, textvariable=self.games, bg=BODY, fg=TEXT,
-                         insertbackground=TEXT, relief="flat",
-                         font=("Segoe UI", 9))
-        entry.pack(fill="x", ipady=3)
-        entry.bind("<Return>", lambda _: self._save_games())
-        entry.bind("<FocusOut>", lambda _: self._save_games())
+        for name, sections in self.LAYOUT.items():
+            tab = self.tabs[name]
+            if name == "Trigger":
+                self._choice_row(tab, "Modus", "triggers")
+            if name == "Gyro":
+                self._choice_row(tab, "Aktiv", "gyro")
+            for title, items in sections:
+                self._section(tab, title)
+                grid = tk.Frame(tab, bg=PANEL)
+                grid.pack(fill="x")
+                grid.columnconfigure(1, weight=1)
+                for r, spec in enumerate(items):
+                    self._slider(grid, r, *spec)
+            if name == "Sticks":
+                self.measure_btn = self._button(tab, "Reichweite messen",
+                                                self._measure)
+                self.measure_btn.pack(anchor="w", pady=(8, 0))
+                self._note(tab, "Beide Sticks nach dem Klick ein paar Mal "
+                                "am Anschlag kreisen lassen.")
+            if name == "Gyro":
+                self._section(tab, "Richtung")
+                for key, label in (("gyro_invert_x", "Links/rechts umkehren"),
+                                   ("gyro_invert_y", "Oben/unten umkehren")):
+                    self._flag(tab, key, label)
+                self._note(tab, "Controller beim Start ruhig liegen lassen - "
+                                "dabei wird auch der Gyro kalibriert.")
+            if name == "Spiele":
+                self._build_games(tab)
+        self.tab_area.update_idletasks()
+        self.tab_area.configure(
+            width=max(t.winfo_reqwidth() for t in self.tabs.values()),
+            height=max(t.winfo_reqheight() for t in self.tabs.values()))
+        self.tab_area.pack_propagate(False)
+        self._show_tab("Trigger")
 
     # --- Aufbau ---------------------------------------------------------
 
-    def _section(self, title: str) -> None:
-        tk.Label(self.frame, text=title, bg=PANEL, fg=DIM,
+    def _button(self, parent, text, cmd) -> tk.Button:
+        return tk.Button(parent, text=text, command=cmd, bg=BODY, fg=TEXT,
+                         activebackground=ON, activeforeground="white",
+                         relief="flat", padx=8, font=("Segoe UI", 9))
+
+    def _section(self, parent, title: str) -> None:
+        tk.Label(parent, text=title, bg=PANEL, fg=DIM,
                  font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(10, 2))
+
+    def _note(self, parent, text: str) -> None:
+        tk.Label(parent, text=text, bg=PANEL, fg=DIM, font=("Segoe UI", 8),
+                 wraplength=320, justify="left").pack(anchor="w", pady=(6, 0))
+
+    def _choice_row(self, parent, title: str, key: str) -> None:
+        self._section(parent, title)
+        row = tk.Frame(parent, bg=PANEL)
+        row.pack(fill="x")
+        self.choice_btns[key] = {}
+        for val, name in self.CHOICES[key].items():
+            b = tk.Button(row, text=name, relief="flat", padx=6, bd=0,
+                          font=("Segoe UI", 9),
+                          command=lambda v=val, k=key: self._set_choice(k, v))
+            b.pack(side="left", padx=(0, 4))
+            self.choice_btns[key][val] = b
+
+    def _flag(self, parent, key: str, label: str) -> None:
+        var = tk.BooleanVar()
+        tk.Checkbutton(parent, text=label, variable=var,
+                       command=lambda k=key: self._set_flag(k),
+                       bg=PANEL, fg=TEXT, selectcolor=BODY,
+                       activebackground=PANEL, activeforeground=TEXT,
+                       font=("Segoe UI", 9)).pack(anchor="w")
+        self.flags[key] = var
 
     def _slider(self, grid, row, key, label, lo, hi, step, factor, unit):
         tk.Label(grid, text=label, bg=PANEL, fg=TEXT, font=("Segoe UI", 9),
@@ -213,18 +274,68 @@ class ProfilePanel:
                  activebackground="#6f9dff",
                  highlightthickness=0, bd=0, sliderrelief="flat",
                  command=lambda _v, k=key: self._changed(k)
-                 ).grid(row=row, column=1, sticky="ew", padx=6)
-        val = tk.Label(grid, text="", bg=PANEL, fg=TEXT, width=5,
+                 ).grid(row=row, column=1, sticky="ew", padx=6, pady=2)
+        val = tk.Label(grid, text="", bg=PANEL, fg=TEXT, width=6,
                        font=("Consolas", 9), anchor="e")
         val.grid(row=row, column=2)
         self.vars[key], self.vals[key] = var, val
         self.fmt[key] = (factor, unit, step)
+
+    def _build_games(self, tab) -> None:
+        self.auto = tk.BooleanVar()
+        self._section(tab, "Automatisch umschalten")
+        tk.Checkbutton(tab, text="Profil wechseln, wenn ein Spiel laeuft",
+                       variable=self.auto, command=self._toggle_auto,
+                       bg=PANEL, fg=TEXT, selectcolor=BODY,
+                       activebackground=PANEL, activeforeground=TEXT,
+                       font=("Segoe UI", 9)).pack(anchor="w")
+        self._section(tab, "Spiele dieses Profils (Teil des Exe-Namens)")
+        self.games = tk.StringVar()
+        entry = tk.Entry(tab, textvariable=self.games, bg=BODY, fg=TEXT,
+                         insertbackground=TEXT, relief="flat",
+                         font=("Segoe UI", 9))
+        entry.pack(fill="x", ipady=3)
+        entry.bind("<Return>", lambda _: self._save_games())
+        entry.bind("<FocusOut>", lambda _: self._save_games())
+        self._note(tab, "Mehrere mit Komma trennen, z. B. "
+                        "forzahorizon, forzamotorsport")
+
+        self._section(tab, "Forza-Telemetrie (fuer echtes ABS-Gefuehl)")
+        self.tele_lbl = tk.Label(tab, text="", bg=PANEL, fg=DIM,
+                                 font=("Segoe UI", 9), anchor="w")
+        self.tele_lbl.pack(anchor="w")
+        port = settings.load()["telemetry_port"]
+        self._note(tab, "Im Spiel: Einstellungen > HUD und Gameplay > "
+                        f"Data Out = An, IP 127.0.0.1, Port {port}. Ohne "
+                        "Telemetrie wird ABS aus Bremsdruck und Rumble "
+                        "geschaetzt.")
+
+    def _show_tab(self, name: str) -> None:
+        for n, tab in self.tabs.items():
+            tab.pack_forget()
+            on = n == name
+            self.tab_btns[n].configure(
+                bg=BODY if on else PANEL, fg=TEXT if on else DIM,
+                activebackground=BODY, activeforeground=TEXT)
+        self.tabs[name].pack(fill="both", expand=True)
 
     def _show_value(self, key: str) -> None:
         factor, unit, step = self.fmt[key]
         v = self.vars[key].get() * factor
         text = f"{v:.0f}{unit}" if step >= 1 or factor == 100 else f"{v:.1f}"
         self.vals[key].configure(text=text)
+
+    def show_telemetry(self, status: dict) -> None:
+        if status.get("telemetry_error"):
+            self.tele_lbl.configure(text=status["telemetry_error"], fg=BAD)
+        elif status.get("telemetry"):
+            self.tele_lbl.configure(text="Empfaengt Daten - ABS aus echtem "
+                                         "Reifenschlupf", fg=OK)
+        elif status.get("telemetry_seen"):
+            self.tele_lbl.configure(text="Verbunden, gerade kein Rennen",
+                                    fg=WARN)
+        else:
+            self.tele_lbl.configure(text="Keine Daten", fg=DIM)
 
     # --- Abgleich mit settings.json -------------------------------------
 
@@ -249,7 +360,9 @@ class ProfilePanel:
         # ueberschrieben, bevor es gespeichert ist.
         same = all(abs(float(p[k]) - self.vars[k].get()) < 1e-6
                    for k in self.vars)
-        return same and p["triggers"] == self._mode
+        same = same and all(p[k] == v for k, v in self.choice_val.items())
+        return same and all(bool(p[k]) == v.get()
+                            for k, v in self.flags.items())
 
     def _load(self, name: str, data: dict) -> None:
         self._loading = True
@@ -260,7 +373,10 @@ class ProfilePanel:
             var.set(float(p[k]))
             self._loaded[k] = var.get()
             self._show_value(k)
-        self._show_mode(p["triggers"])
+        for k in self.CHOICES:
+            self._show_choice(k, p[k])
+        for k, var in self.flags.items():
+            var.set(bool(p[k]))
         self.games.set(", ".join(p["games"]))
         self._loading = False
 
@@ -291,21 +407,21 @@ class ProfilePanel:
         if self.edit and changes:
             settings.update_profile(self.edit, **changes)
 
-    def _set_mode(self, mode: str) -> None:
-        self._show_mode(mode)
+    def _set_choice(self, key: str, val: str) -> None:
+        self._show_choice(key, val)
         if self.edit:
-            settings.update_profile(self.edit, triggers=mode)
+            settings.update_profile(self.edit, **{key: val})
 
-    def _show_mode(self, mode: str) -> None:
-        self._mode = mode
-        racing = mode in ("racing", "racing_live")
-        for key, b in self.mode_btns.items():
-            on = key == mode
+    def _show_choice(self, key: str, val: str) -> None:
+        self.choice_val[key] = val
+        for v, b in self.choice_btns[key].items():
+            on = v == val
             b.configure(bg=ON if on else BODY, fg="white" if on else TEXT,
                         activebackground=ON, activeforeground="white")
-        # Bremse/Gas-Regler gelten nur fuer die Racing-Modi.
-        for k in ("brake_start", "brake_force", "gas_force"):
-            self.vals[k].configure(fg=TEXT if racing else OFF)
+
+    def _set_flag(self, key: str) -> None:
+        if self.edit:
+            settings.update_profile(self.edit, **{key: self.flags[key].get()})
 
     def _toggle_auto(self) -> None:
         settings.update(auto_game=self.auto.get())
@@ -470,6 +586,8 @@ class Monitor:
             self._last_games = now
             self._game = games.detect(data)
         eff = settings.effective(data, self._game[1] if self._game else None)
+        status = settings.read_status() if self._running else {}
+        self.panel.show_telemetry(status)
         if self._game and eff == self._game[1]:
             self.active_lbl.configure(
                 text=f"Aktiv: {eff}  (automatisch - {self._game[0]} laeuft)",

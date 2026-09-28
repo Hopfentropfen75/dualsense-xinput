@@ -59,9 +59,12 @@ class Config:
     # Direkt hinter der Deadzone auf diesen Wert springen - gleicht die
     # Deadzone aus, die das Spiel selbst noch einmal abzieht.
     anti_deadzone: float = 0.0
-    # Trigger: Leerweg (0..1) und Kurve (1 = linear, >1 = feiner am Anfang).
-    trigger_deadzone: float = 0.0
-    trigger_curve: float = 1.0
+    # Trigger: Leerweg (0..1) und Kurve (1 = linear, >1 = feiner am
+    # Anfang), getrennt - die Bremse soll sofort greifen, Gas darf Spiel haben.
+    l2_deadzone: float = 0.0
+    r2_deadzone: float = 0.0
+    l2_curve: float = 1.0
+    r2_curve: float = 1.0
     # Ab welchem Rohwert ein Analogtrigger als Klick zaehlt.
     trigger_threshold: int = 30
     # Stick-Mittelpunkte; per calibrate() aus der Ruhelage bestimmt.
@@ -147,8 +150,8 @@ def map_state(st: State, cfg: Config | None = None) -> XPad:
 
     out.lx, out.ly = _to_i16(lx), _to_i16(ly)
     out.rx, out.ry = _to_i16(rx), _to_i16(ry)
-    out.lt = _trigger(st.l2, cfg.trigger_deadzone, cfg.trigger_curve)
-    out.rt = _trigger(st.r2, cfg.trigger_deadzone, cfg.trigger_curve)
+    out.lt = _trigger(st.l2, cfg.l2_deadzone, cfg.l2_curve)
+    out.rt = _trigger(st.r2, cfg.r2_deadzone, cfg.r2_curve)
 
     mask = 0
     for name in st.buttons:

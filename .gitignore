@@ -4,3 +4,5 @@ __pycache__/
 .venv/
 settings.json
 settings.tmp
+status.json
+status.stmp

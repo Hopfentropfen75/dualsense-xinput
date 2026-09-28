@@ -23,7 +23,7 @@ Rennspiele (Forza Horizon) sortiert.
       per Regler, eigene Profile anlegen.
 - [x] **Rumble-Verstaerker** - Faktor fuer die Motorstaerke, falls die
       Emulation zu schwach wirkt.
-- [ ] **Live-Trigger ausbauen** - Bremse bei starkem Rumble pulsieren lassen
+- [x] **Live-Trigger ausbauen** - Bremse bei starkem Rumble pulsieren lassen
       (ABS-Gefuehl), Frequenz aus dem leichten Motor ableiten.
 - [ ] **Echte Haptik** - die Voice-Coil-Motoren laufen ueber einen
       Audiokanal (nur USB). Grosses Projekt.
@@ -35,10 +35,17 @@ Rennspiele (Forza Horizon) sortiert.
 - [ ] **Autostart mit Windows** - Schalter im Tray-Menue.
 - [ ] **Physischen DualSense verstecken (HidHide)** - Spiele mit eigener
       DualSense-Unterstuetzung sehen sonst zwei Controller.
-- [ ] **Gyro-Zielen** - Bewegungssensor auf den rechten Stick, nur solange
+- [x] **Gyro-Zielen** - Bewegungssensor auf den rechten Stick, nur solange
       eine Taste gehalten wird.
 - [ ] **Touchpad belegen** - Klick auf Back/View oder als Maus.
 - [ ] **Lightbar zeigt Akku** - Farbe wechselt bei niedrigem Stand.
+
+## Ideen aus dem Feedback
+
+- [ ] **Telemetrie weiter nutzen** - Lightbar als Drehzahlanzeige, Rumble
+      bei Rumpelstreifen (Forza liefert beides).
+- [ ] **Gyro-Glaettung** - leichtes Filtern gegen Zittern bei hoher
+      Empfindlichkeit.
 
 ## Technik
 
