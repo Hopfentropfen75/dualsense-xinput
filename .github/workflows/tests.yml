@@ -38,7 +38,7 @@ jobs:
         shell: bash
         run: |
           curl -sL https://files.pythonhosted.org/packages/source/v/vgamepad/vgamepad-0.1.0.tar.gz | tar xz
-          echo "PYTHONPATH=$(pwd)/vgamepad-0.1.0" >> "$GITHUB_ENV"
+          echo "PYTHONPATH=$(cygpath -w "$(pwd)/vgamepad-0.1.0")" >> "$GITHUB_ENV"
       - run: python -c "import vgamepad.win.vigem_client, os; print(os.path.dirname(vgamepad.__file__))"
       - run: python build.py
       - uses: actions/upload-artifact@v7
