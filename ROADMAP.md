@@ -60,7 +60,7 @@ Rennspiele (Forza Horizon) sortiert.
 - [x] Eingabe-Warteschlange leeren statt Rueckstau (USB 1000 Hz)
 - [x] ViGEm nur bei Aenderung aktualisieren
 - [x] Schutz gegen Doppelstart, Desktop-Verknuepfungen mit Icon
-- [x] Anzeigefenster mit Status und Live-Eingaben
+- [x] Cockpit (Edge-App-Fenster) mit Live-Eingaben, Telemetrie, Verlauf und Profilen
 - [x] Adaptive Trigger mit Profilen (Racing, Racing + Rumble, Shooter)
 - [x] Kraeftigere Rumble-Emulation ab Firmware 2.21
 - [x] Lightbar- und Player-LED-Offsets nach hid-playstation korrigiert

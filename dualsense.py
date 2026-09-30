@@ -175,6 +175,8 @@ class DualSense:
         self.dev.set_nonblocking(True)
         self.bluetooth = False
         self.state = State()
+        # Gelesene Reports insgesamt - daraus ergibt sich die Reportrate.
+        self.reports = 0
 
     def enable_full_bt(self) -> None:
         """Ueber BT liefert der Controller erst nach diesem Feature-Report
@@ -216,12 +218,14 @@ class DualSense:
         data = self.dev.read(78, timeout_ms)
         if not data:
             return None
+        self.reports += 1
         # Begrenzt, damit ein Dauerstrom die Schleife nicht festhaelt.
         for _ in range(256):
             newer = self.dev.read(78)
             if not newer:
                 break
             data = newer
+            self.reports += 1
         st = decode(bytes(data))
         if st is None:
             return None

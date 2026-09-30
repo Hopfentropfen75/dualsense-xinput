@@ -93,22 +93,37 @@ class Setup:
     abs_frequency: int = 20
     spin_strength: int = 0
 
+    def levels(self, rumble: tuple[int, int] = (0, 0), l2: int = 0,
+               r2: int = 0, tele=None) -> tuple[float, float]:
+        """(ABS, Durchdrehen) je 0..1 - auch fuers Cockpit."""
+        if not self.live:
+            return 0.0, 0.0
+        a = self._abs(rumble, l2, tele) if self.abs_strength > 0 else 0.0
+        w = self._spin(rumble, l2, r2, tele) if self.spin_strength > 0 else 0.0
+        return a, w
+
     def effects(self, rumble: tuple[int, int] = (0, 0), l2: int = 0,
-                r2: int = 0, tele=None) -> tuple[bytes, bytes]:
+                r2: int = 0, tele=None,
+                levels: tuple[float, float] | None = None
+                ) -> tuple[bytes, bytes]:
         if not self.live:
             return self.left, self.right
         left, right = self.left, self.right
-        a = self._abs(rumble, l2, tele)
-        if a > 0 and self.abs_strength > 0:
+        a, w = levels or self.levels(rumble, l2, r2, tele)
+        if a > 0:
+            left = self.abs_pulse(a)
+        if w > 0:
             # Auf ganze Stufen gerundet - sonst ginge bei jeder kleinen
             # Aenderung ein neuer Report raus.
-            amp = max(1, round(self.abs_strength * a))
-            left = vibration(0, amp, self.abs_frequency)
-        w = self._spin(rumble, l2, r2, tele)
-        if w > 0 and self.spin_strength > 0:
             amp = max(1, round(self.spin_strength * w))
             right = vibration(1, amp, SPIN_FREQUENCY)
         return left, right
+
+    def abs_pulse(self, level: float = 1.0) -> bytes:
+        """L2 pulsiert - auch fuer den Test-Knopf im Cockpit, daher mit
+        Ersatzstaerke, wenn im Profil keine eingestellt ist."""
+        amp = max(1, round((self.abs_strength or 6) * level))
+        return vibration(0, amp, self.abs_frequency)
 
     @staticmethod
     def _abs(rumble, l2, tele) -> float:

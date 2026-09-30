@@ -6,7 +6,7 @@ jedes XInput-Spiel als echten Controller sieht. USB und Bluetooth.
 ## Start
 
 ```
-pythonw tray.py            # empfohlen: Bruecke im Tray plus Anzeigefenster
+pythonw tray.py            # empfohlen: Bruecke im Tray plus Cockpit
 pythonw tray.py --hidden   # dasselbe ohne Fenster, z. B. fuer Autostart
 python bridge.py           # nur die Bruecke, mit Live-Ausgabe im Terminal
 ```
@@ -24,24 +24,27 @@ python bridge.py --deadzone 0.12  # Deadzone fest vorgeben statt aus dem Profil
 python bridge.py --quiet          # ohne Live-Anzeige
 ```
 
-## Anzeigefenster
+## Cockpit
 
-```
-pythonw monitor.py
-```
+Das Fenster, das beim Start aufgeht: Verbindung (Controller -> Bruecke ->
+Xbox-Pad mit Reportrate), Live-Eingaben so wie das Spiel sie sieht,
+Forza-Telemetrie mit Reifenschlupf pro Rad, Verlauf von Bremse, Gas und
+ABS, dazu alle Profil-Einstellungen. Tasten stehen mit PlayStation-Namen
+da, das Xbox-Gegenstueck in Klammern - `✕ (A)`, `L1 (LB)`.
 
-Zeigt, ob Controller, Bruecke und virtueller Xbox-Pad da sind, und spiegelt
-die Eingaben als Schema - so, wie ein Spiel sie ueber XInput sieht. Laeuft
-die Bruecke nicht, laesst sie sich dort starten. Aus dem Tray per
-Doppelklick aufs Symbol oder "Anzeige oeffnen" - oder die Verknuepfung
-nochmal starten.
+Technisch ist es eine lokale Seite (`ui/cockpit.html`), die der
+Tray-Prozess auf 127.0.0.1 ausliefert (`webui.py`) und die in einem
+Edge-App-Fenster ohne Adressleiste laeuft. Die Live-Werte kommen direkt
+aus der Bruecke; die API verlangt ein Zufallstoken, das nur im Link des
+Fensters steht. Wird das Fenster geschlossen, laeuft die Bruecke weiter -
+wieder oeffnen per Desktop-Symbol oder Doppelklick aufs Tray-Symbol.
 
 ## Profile und Einstellungen
 
 Alles, was sich pro Spiel unterscheiden soll, steckt in einem Profil:
 Trigger-Widerstand, Stick-Deadzones, Trigger-Kurve und Rumble-Staerke.
 Mitgeliefert sind **Standard**, **Forza** und **Shooter**; im
-Anzeigefenster lassen sich Profile anlegen, loeschen und per Regler
+Cockpit lassen sich Profile anlegen, loeschen und per Regler
 einstellen. Aenderungen wirken nach ein bis zwei Sekunden, ohne Neustart.
 
 **Automatisch pro Spiel:** Jedes Profil hat eine Liste von Teilen des
@@ -76,7 +79,7 @@ die Hinterraeder durchdrehen - aus dem echten Reifenschlupf. Im Spiel:
 > Einstellungen > HUD und Gameplay > **Data Out** = An,
 > **Data Out IP** = `127.0.0.1`, **Data Out Port** = `5300`
 
-Ob Daten ankommen, zeigt das Anzeigefenster im Tab "Spiele". Ohne
+Ob Daten ankommen, zeigt das Cockpit im Tab "Live" und "Profile". Ohne
 Telemetrie schaetzt die Bruecke ABS aus kraeftigem Bremsen plus Rumble.
 
 ### Gyro-Zielen

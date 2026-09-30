@@ -1,0 +1,826 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DualSense Cockpit</title>
+<link rel="icon" href="/favicon.ico">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+  :root {
+    color-scheme: dark;
+    --ground: #0E1116;
+    --shell: #161A21;
+    --shell-2: #1D222B;
+    --line: #2A303B;
+    --ink: #E8ECF2;
+    --mute: #8A93A3;
+    --faint: #5A6272;
+    --light: #3D7BFF;
+    --light-soft: rgba(61, 123, 255, .16);
+    --abs: #FFB020;
+    --slip: #FF5A4E;
+    --grip: #4CC38A;
+    --display: "Chakra Petch", "Bahnschrift", "Segoe UI", sans-serif;
+    --body: "Instrument Sans", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
+    --r: 10px;
+  }
+  * { box-sizing: border-box; }
+  /* hidden muss gegen display:grid/flex der Klassen gewinnen. */
+  [hidden] { display: none !important; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--shell); color: var(--ink); font: 14px/1.5 var(--body); overflow: hidden; }
+  button { font: inherit; }
+  .app { height: 100%; display: flex; flex-direction: column; }
+
+  /* ---------- Kopf ---------- */
+  .head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding: 14px 20px; }
+  .brand { display: flex; align-items: center; gap: 10px; font: 700 17px/1 var(--display); letter-spacing: .04em; }
+  .brand .mark { width: 26px; height: 8px; border-radius: 4px; background: var(--light); box-shadow: 0 0 14px var(--light); transition: background .1s, box-shadow .1s; }
+  .brand.abs .mark { background: var(--abs); box-shadow: 0 0 16px var(--abs); }
+
+  .chain { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .node { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--shell-2); font-size: 12.5px; white-space: nowrap; }
+  .node b { font-weight: 600; }
+  .node .sub { font: 11px/1 var(--mono); color: var(--mute); }
+  .led { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); }
+  .led.ok { background: var(--grip); box-shadow: 0 0 8px var(--grip); }
+  .led.warn { background: var(--abs); box-shadow: 0 0 8px var(--abs); }
+  .led.bad { background: var(--slip); box-shadow: 0 0 8px var(--slip); }
+  .arrow { color: var(--faint); font: 12px var(--mono); }
+
+  .head-right { margin-left: auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; position: relative; }
+  .profile-pick { display: flex; align-items: center; gap: 10px; padding: 6px 8px 6px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--shell-2); color: var(--ink); font-weight: 600; cursor: pointer; }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--light); outline-offset: 2px; }
+  .auto-chip { font: 600 10.5px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--grip); background: rgba(76, 195, 138, .12); padding: 5px 7px; border-radius: 5px; }
+  .battery { display: flex; align-items: center; gap: 6px; font: 12px var(--mono); color: var(--mute); }
+  .battery .cell { width: 24px; height: 11px; border: 1.5px solid var(--mute); border-radius: 3px; padding: 1.5px; position: relative; }
+  .battery .cell::after { content: ""; position: absolute; right: -4px; top: 3px; width: 2px; height: 4px; background: var(--mute); border-radius: 0 1px 1px 0; }
+  .battery .cell i { display: block; height: 100%; width: 0; background: var(--grip); border-radius: 1px; }
+
+  .menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 10; min-width: 240px; background: var(--shell-2); border: 1px solid var(--line); border-radius: 10px; padding: 6px; box-shadow: 0 20px 40px -12px rgba(0,0,0,.7); display: grid; gap: 2px; }
+  .menu button { text-align: left; border: 0; background: transparent; color: var(--ink); padding: 8px 10px; border-radius: 6px; cursor: pointer; display: flex; justify-content: space-between; gap: 12px; }
+  .menu button:hover { background: var(--light-soft); }
+  .menu button .check { color: var(--light); }
+  .menu .note { font-size: 12px; color: var(--mute); padding: 6px 10px 4px; border-top: 1px solid var(--line); margin-top: 4px; }
+
+  .lightbar { height: 3px; flex: none; background: var(--light); box-shadow: 0 0 18px 2px var(--light), 0 0 50px 6px var(--light-soft); transition: background .08s, box-shadow .08s; }
+  .lightbar.abs { background: var(--abs); box-shadow: 0 0 18px 2px var(--abs), 0 0 50px 6px rgba(255, 176, 32, .18); }
+  .lightbar.off { background: var(--line); box-shadow: none; }
+
+  .body { flex: 1; min-height: 0; display: grid; grid-template-columns: 76px 1fr; }
+  .rail { border-right: 1px solid var(--line); padding: 12px 8px; display: flex; flex-direction: column; gap: 4px; background: #13161C; }
+  .tab { display: grid; justify-items: center; gap: 5px; padding: 10px 4px; border: 0; border-radius: 8px; background: transparent; color: var(--mute); font: 500 11px/1 var(--body); cursor: pointer; }
+  .tab svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.6; }
+  .tab:hover { color: var(--ink); background: var(--shell-2); }
+  .tab[aria-selected="true"] { color: var(--ink); background: var(--light-soft); }
+  .tab[aria-selected="true"] svg { stroke: var(--light); }
+
+  .view { padding: 20px; display: grid; gap: 16px; align-content: start; overflow-y: auto; min-height: 0; }
+  .view[hidden] { display: none !important; }
+
+  .panel { background: var(--shell-2); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; display: grid; gap: 12px; align-content: start; min-width: 0; }
+  .panel-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .panel h2 { font: 600 13px/1.2 var(--display); letter-spacing: .08em; text-transform: uppercase; margin: 0; }
+  .hint { color: var(--mute); font-size: 12.5px; }
+  .grid-live { display: grid; grid-template-columns: 1.35fr 1fr; gap: 16px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+  /* Eingaenge */
+  .cluster { display: grid; grid-template-columns: 1fr auto auto 1fr; gap: 14px; align-items: center; justify-items: center; }
+  .scope { width: 100%; max-width: 150px; aspect-ratio: 1; }
+  .scope-label { font: 11px var(--mono); color: var(--mute); text-align: center; margin-top: 4px; }
+  .tbar { display: grid; justify-items: center; gap: 6px; }
+  .tbar svg { width: 34px; height: 150px; }
+  .tbar span { font: 600 11px var(--mono); color: var(--mute); }
+  .keys { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+  .key { min-width: 34px; padding: 5px 7px; border-radius: 6px; text-align: center; background: var(--ground); border: 1px solid var(--line); color: var(--faint); font: 600 11px/1 var(--mono); transition: all .06s; }
+  .key.on { color: #fff; background: var(--light); border-color: var(--light); box-shadow: 0 0 10px var(--light-soft); }
+
+  /* Telemetrie */
+  .tele { display: grid; grid-template-columns: auto 1fr; gap: 18px; align-items: center; }
+  .car { width: 120px; height: 190px; }
+  .readouts { display: grid; gap: 12px; }
+  .big { font: 600 44px/1 var(--display); letter-spacing: .01em; font-variant-numeric: tabular-nums; }
+  .big small { font: 500 13px var(--mono); color: var(--mute); margin-left: 6px; letter-spacing: 0; }
+  .state { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { font: 600 11px/1 var(--mono); letter-spacing: .05em; text-transform: uppercase; padding: 6px 8px; border-radius: 5px; border: 1px solid var(--line); color: var(--faint); }
+  .chip.abs-on { color: #1a1204; background: var(--abs); border-color: var(--abs); }
+  .chip.spin-on { color: #fff; background: var(--slip); border-color: var(--slip); }
+  .chip.ok { color: var(--grip); border-color: rgba(76, 195, 138, .4); }
+  .chip.warn { color: var(--abs); border-color: rgba(255, 176, 32, .4); }
+  .slip-legend { display: flex; gap: 12px; font: 11px var(--mono); color: var(--mute); flex-wrap: wrap; }
+  .slip-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; }
+  .setup { font-size: 12.5px; color: var(--mute); line-height: 1.55; }
+  .setup code { font: 12px var(--mono); color: var(--ink); background: var(--ground); padding: 1px 5px; border-radius: 4px; }
+
+  .timeline canvas { width: 100%; height: 120px; display: block; }
+  .legend { display: flex; gap: 14px; font: 11px var(--mono); color: var(--mute); flex-wrap: wrap; }
+  .legend i { display: inline-block; width: 12px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: 3px; }
+
+  /* Regler */
+  .zones svg { width: 100%; height: auto; display: block; overflow: visible; }
+  .rows { display: grid; gap: 8px; }
+  .row { display: grid; grid-template-columns: 140px 1fr 60px; gap: 12px; align-items: center; }
+  .row label { color: var(--mute); font-size: 13px; }
+  .row output { font: 600 12px var(--mono); text-align: right; font-variant-numeric: tabular-nums; }
+  input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 22px; background: transparent; cursor: pointer; margin: 0; }
+  input[type="range"]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--light) var(--p, 50%), var(--line) var(--p, 50%)); }
+  input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--ink); border: 3px solid var(--light); margin-top: -6px; }
+  input[type="text"] { width: 100%; background: var(--ground); border: 1px solid var(--line); color: var(--ink); border-radius: 8px; padding: 8px 10px; font: 13px var(--mono); }
+  .check { display: flex; align-items: center; gap: 10px; color: var(--ink); font-size: 13px; cursor: pointer; }
+  .check input { accent-color: var(--light); width: 16px; height: 16px; }
+
+  .seg { display: inline-flex; background: var(--ground); border: 1px solid var(--line); border-radius: 8px; padding: 3px; gap: 2px; flex-wrap: wrap; justify-self: start; }
+  .seg button { border: 0; background: transparent; color: var(--mute); font-size: 12.5px; font-weight: 500; padding: 6px 11px; border-radius: 6px; cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--light); color: #fff; }
+
+  .btn { justify-self: start; border: 1px solid var(--line); color: var(--ink); background: var(--ground); font-size: 12.5px; font-weight: 600; padding: 8px 12px; border-radius: 8px; cursor: pointer; }
+  .btn:hover { border-color: var(--light); }
+  .btn.amber { border-color: var(--abs); color: var(--abs); background: rgba(255, 176, 32, .08); }
+  .btn.danger { border-color: var(--slip); color: var(--slip); }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .curve svg { width: 100%; max-width: 220px; height: auto; display: block; }
+  .split { display: grid; grid-template-columns: 1fr 220px; gap: 16px; align-items: center; }
+  .dim { opacity: .45; }
+
+  /* Profile */
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+  .card { text-align: left; background: var(--shell-2); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; display: grid; gap: 6px; color: var(--ink); cursor: pointer; }
+  .card:hover { border-color: var(--faint); }
+  .card.on { border-color: var(--light); box-shadow: 0 0 0 1px var(--light) inset; }
+  .card h3 { margin: 0; font: 600 15px/1.2 var(--display); letter-spacing: .04em; }
+  .inline { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .inline input[type="text"] { width: auto; flex: 1; min-width: 160px; }
+  .msg { font-size: 12.5px; color: var(--slip); }
+
+  .overlay { position: fixed; inset: 0; background: rgba(14, 17, 22, .86); display: grid; place-items: center; z-index: 50; }
+  .overlay div { text-align: center; display: grid; gap: 8px; max-width: 420px; padding: 24px; }
+  .overlay h2 { margin: 0; font: 600 20px var(--display); }
+  .overlay p { margin: 0; color: var(--mute); }
+
+  @media (max-width: 980px) { .grid-live, .grid-2, .split { grid-template-columns: 1fr; } .head-right { margin-left: 0; } }
+  @media (prefers-reduced-motion: reduce) { .lightbar, .brand .mark, .key { transition: none; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="head">
+    <div class="brand" id="brand"><span class="mark"></span>DualSense</div>
+    <div class="chain" aria-label="Verbindung">
+      <span class="node"><span class="led" id="ledDs"></span><b>DualSense</b><span class="sub" id="subDs">–</span></span>
+      <span class="arrow">→</span>
+      <span class="node"><span class="led" id="ledBr"></span><b>Brücke</b><span class="sub" id="subBr">–</span></span>
+      <span class="arrow">→</span>
+      <span class="node"><span class="led" id="ledXp"></span><b>Xbox-Pad</b><span class="sub" id="subXp">–</span></span>
+    </div>
+    <div class="head-right">
+      <span class="auto-chip" id="autoChip" hidden></span>
+      <button class="profile-pick" id="profileBtn" type="button" aria-haspopup="true" aria-expanded="false"><span id="profileName">–</span> <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5l3 3 3-3" stroke="currentColor" stroke-width="1.6" fill="none"/></svg></button>
+      <span class="battery" id="battery" hidden><span class="cell"><i id="battFill"></i></span><span id="battText"></span></span>
+      <div class="menu" id="profileMenu" hidden></div>
+    </div>
+  </div>
+  <div class="lightbar off" id="lightbar"></div>
+
+  <div class="body">
+    <nav class="rail" role="tablist" aria-label="Bereiche">
+      <button class="tab" role="tab" aria-selected="true" data-view="live" id="tab-live"><svg viewBox="0 0 24 24"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg>Live</button>
+      <button class="tab" role="tab" aria-selected="false" data-view="trigger" id="tab-trigger"><svg viewBox="0 0 24 24"><path d="M7 3h6a4 4 0 0 1 4 4v3H7z"/><path d="M9 10v8a3 3 0 0 0 6 0v-8"/></svg>Trigger</button>
+      <button class="tab" role="tab" aria-selected="false" data-view="sticks" id="tab-sticks"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg>Sticks</button>
+      <button class="tab" role="tab" aria-selected="false" data-view="gyro" id="tab-gyro"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>Gyro</button>
+      <button class="tab" role="tab" aria-selected="false" data-view="profile" id="tab-profile"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>Profile</button>
+    </nav>
+
+    <!-- LIVE -->
+    <div class="view" id="view-live" role="tabpanel" aria-labelledby="tab-live">
+      <div class="grid-live">
+        <section class="panel">
+          <div class="panel-head"><h2>Eingänge</h2><span class="hint">so, wie das Spiel sie sieht</span></div>
+          <div class="cluster">
+            <div><svg class="scope" id="scopeL" viewBox="-60 -60 120 120"></svg><div class="scope-label">Linker Stick · L3 (LS)</div></div>
+            <div class="tbar"><svg id="barL2" viewBox="0 0 34 150"></svg><span>L2 (LT)</span></div>
+            <div class="tbar"><svg id="barR2" viewBox="0 0 34 150"></svg><span>R2 (RT)</span></div>
+            <div><svg class="scope" id="scopeR" viewBox="-60 -60 120 120"></svg><div class="scope-label">Rechter Stick · R3 (RS)</div></div>
+          </div>
+          <div class="keys" id="keys"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head"><h2>Telemetrie</h2><span class="hint">Forza Data Out</span></div>
+          <div class="tele">
+            <svg class="car" id="car" viewBox="0 0 120 190" aria-label="Reifenschlupf pro Rad"></svg>
+            <div class="readouts">
+              <div class="big" id="speed">–<small>km/h</small></div>
+              <div class="state"><span class="chip" id="chipAbs">ABS</span><span class="chip" id="chipSpin">Durchdrehen</span><span class="chip" id="chipTele">Data Out</span></div>
+              <div class="slip-legend"><span><i style="background:var(--grip)"></i>Grip</span><span><i style="background:var(--abs)"></i>am Limit</span><span><i style="background:var(--slip)"></i>rutscht</span></div>
+            </div>
+          </div>
+          <div class="setup" id="teleSetup">In Forza unter <b>Einstellungen › HUD und Gameplay</b>: <code>Data Out</code> an, IP <code>127.0.0.1</code>, Port <code id="telePort">5300</code>. Ohne Telemetrie wird ABS aus Bremsdruck und Rumble geschätzt.</div>
+        </section>
+      </div>
+
+      <section class="panel timeline">
+        <div class="panel-head"><h2>Letzte 8 Sekunden</h2><span class="hint">Pedale und Feedback im Verlauf</span></div>
+        <canvas id="timeline" width="1100" height="240" aria-label="Verlauf von Bremse, Gas und ABS"></canvas>
+        <div class="legend"><span><i style="background:var(--slip)"></i>Bremse L2</span><span><i style="background:var(--grip)"></i>Gas R2</span><span><i style="background:var(--abs)"></i>ABS pulsiert</span></div>
+      </section>
+    </div>
+
+    <!-- TRIGGER -->
+    <div class="view" id="view-trigger" role="tabpanel" aria-labelledby="tab-trigger" hidden>
+      <section class="panel">
+        <div class="panel-head"><h2>Modus</h2><span class="hint" id="editHintT"></span></div>
+        <div class="seg" id="modeSeg" data-key="triggers"></div>
+      </section>
+      <div class="grid-2">
+        <section class="panel zones" id="brakePanel">
+          <div class="panel-head"><h2>L2 · Bremse</h2><span class="hint">Widerstand über den Tastenweg</span></div>
+          <svg id="zonesL2" viewBox="0 0 400 150"></svg>
+          <div class="rows">
+            <div class="row"><label for="brake_start">Druckpunkt</label><input type="range" id="brake_start"><output for="brake_start"></output></div>
+            <div class="row"><label for="brake_force">Kraft</label><input type="range" id="brake_force"><output for="brake_force"></output></div>
+            <div class="row"><label for="abs_strength">ABS-Stärke</label><input type="range" id="abs_strength"><output for="abs_strength"></output></div>
+            <div class="row"><label for="abs_frequency">ABS-Frequenz</label><input type="range" id="abs_frequency"><output for="abs_frequency"></output></div>
+          </div>
+          <button class="btn amber" id="absTest" type="button">ABS am Controller testen</button>
+          <div class="split">
+            <div class="rows">
+              <div class="row"><label for="l2_deadzone">Leerweg</label><input type="range" id="l2_deadzone"><output for="l2_deadzone"></output></div>
+              <div class="row"><label for="l2_curve">Kurve</label><input type="range" id="l2_curve"><output for="l2_curve"></output></div>
+            </div>
+            <div class="curve"><svg id="curveL2" viewBox="0 0 220 150"></svg></div>
+          </div>
+        </section>
+        <section class="panel zones" id="gasPanel">
+          <div class="panel-head"><h2>R2 · Gas</h2><span class="hint">leicht gedämpft zum Dosieren</span></div>
+          <svg id="zonesR2" viewBox="0 0 400 150"></svg>
+          <div class="rows">
+            <div class="row"><label for="gas_force">Widerstand</label><input type="range" id="gas_force"><output for="gas_force"></output></div>
+            <div class="row"><label for="spin_strength">Durchdrehen</label><input type="range" id="spin_strength"><output for="spin_strength"></output></div>
+          </div>
+          <div class="split">
+            <div class="rows">
+              <div class="row"><label for="r2_deadzone">Leerweg</label><input type="range" id="r2_deadzone"><output for="r2_deadzone"></output></div>
+              <div class="row"><label for="r2_curve">Kurve</label><input type="range" id="r2_curve"><output for="r2_curve"></output></div>
+            </div>
+            <div class="curve"><svg id="curveR2" viewBox="0 0 220 150"></svg></div>
+          </div>
+          <div class="rows" style="border-top:1px solid var(--line);padding-top:12px">
+            <div class="row"><label for="rumble_gain">Vibration</label><input type="range" id="rumble_gain"><output for="rumble_gain"></output></div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <!-- STICKS -->
+    <div class="view" id="view-sticks" role="tabpanel" aria-labelledby="tab-sticks" hidden>
+      <div class="grid-2">
+        <section class="panel">
+          <div class="panel-head"><h2>Zonen</h2><span class="hint">maßstabsgetreu am Stickweg · linker Stick live</span></div>
+          <div class="split">
+            <div class="rows">
+              <div class="row"><label for="stick_deadzone">Deadzone innen</label><input type="range" id="stick_deadzone"><output for="stick_deadzone"></output></div>
+              <div class="row"><label for="stick_outer">Äußere Zone</label><input type="range" id="stick_outer"><output for="stick_outer"></output></div>
+              <div class="row"><label for="anti_deadzone">Anti-Deadzone</label><input type="range" id="anti_deadzone"><output for="anti_deadzone"></output></div>
+            </div>
+            <svg class="scope" id="scopeBig" viewBox="-60 -60 120 120" style="max-width:220px"></svg>
+          </div>
+          <div class="curve"><svg id="curveStick" viewBox="0 0 220 150" style="max-width:100%"></svg></div>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><h2>Reichweite</h2><span class="hint">gemessen in 16 Richtungen</span></div>
+          <svg id="reach" viewBox="-70 -70 140 140" style="width:100%;max-width:280px;justify-self:center"></svg>
+          <p class="hint" id="reachText" style="margin:0">Noch nicht gemessen. Nach dem Klick beide Sticks ein paar Mal langsam am Anschlag kreisen lassen.</p>
+          <button class="btn" id="reachBtn" type="button">Reichweite messen</button>
+        </section>
+      </div>
+    </div>
+
+    <!-- GYRO -->
+    <div class="view" id="view-gyro" role="tabpanel" aria-labelledby="tab-gyro" hidden>
+      <div class="grid-2">
+        <section class="panel">
+          <div class="panel-head"><h2>Gyro-Zielen</h2><span class="hint" id="editHintG"></span></div>
+          <div class="seg" id="gyroSeg" data-key="gyro"></div>
+          <div class="rows">
+            <div class="row"><label for="gyro_sensitivity">Empfindlichkeit</label><input type="range" id="gyro_sensitivity"><output for="gyro_sensitivity"></output></div>
+            <div class="row"><label for="gyro_min">Mindestausschlag</label><input type="range" id="gyro_min"><output for="gyro_min"></output></div>
+          </div>
+          <label class="check"><input type="checkbox" id="gyro_invert_x"> Links/rechts umkehren</label>
+          <label class="check"><input type="checkbox" id="gyro_invert_y"> Oben/unten umkehren</label>
+          <p class="hint" style="margin:0">Controller beim Start ruhig liegen lassen – dabei wird auch der Gyro kalibriert.</p>
+          <button class="btn" id="recal" type="button">Neu kalibrieren</button>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><h2>Fadenkreuz</h2><span class="hint" id="gyroState">Drehung → rechter Stick</span></div>
+          <svg class="scope" id="gyroPad" viewBox="-60 -60 120 120" style="max-width:240px;justify-self:center"></svg>
+        </section>
+      </div>
+    </div>
+
+    <!-- PROFILE -->
+    <div class="view" id="view-profile" role="tabpanel" aria-labelledby="tab-profile" hidden>
+      <section class="panel">
+        <div class="panel-head"><h2>Profile</h2><span class="hint">Klick wählt das Profil</span></div>
+        <div class="cards" id="cards"></div>
+        <div class="inline">
+          <input type="text" id="newName" placeholder="Name für neues Profil" aria-label="Name für neues Profil">
+          <button class="btn" id="newBtn" type="button">Als Kopie anlegen</button>
+          <button class="btn danger" id="delBtn" type="button">Profil löschen</button>
+        </div>
+        <div class="msg" id="profileMsg" hidden></div>
+      </section>
+      <div class="grid-2">
+        <section class="panel">
+          <div class="panel-head"><h2>Spiele</h2><span class="hint" id="editHintP"></span></div>
+          <label class="check"><input type="checkbox" id="autoGame"> Profil wechseln, wenn ein Spiel läuft</label>
+          <label class="hint" for="games">Teile des Exe-Namens, mit Komma getrennt</label>
+          <input type="text" id="games" placeholder="z. B. forzahorizon, forzamotorsport">
+        </section>
+        <section class="panel">
+          <div class="panel-head"><h2>Forza-Telemetrie</h2><span class="chip" id="teleState">–</span></div>
+          <div class="setup">Im Spiel unter <b>Einstellungen › HUD und Gameplay</b>: <code>Data Out</code> an, <code>Data Out IP</code> = <code>127.0.0.1</code>, <code>Data Out Port</code> = <code id="telePort2">5300</code>. Dann pulsiert L2 aus dem echten Reifenschlupf.</div>
+        </section>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="offline" hidden><div><h2>Brücke nicht erreichbar</h2><p>Die DualSense-Brücke wurde beendet. Über das Desktop-Symbol „DualSense Controller“ neu starten – dieses Fenster verbindet sich dann von selbst.</p></div></div>
+
+<script>
+(() => {
+  const TOKEN = new URLSearchParams(location.search).get("t") || "";
+  const $ = (id) => document.getElementById(id);
+  const NS = "http://www.w3.org/2000/svg";
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const C = { light: css("--light"), abs: css("--abs"), slip: css("--slip"), grip: css("--grip"),
+              line: css("--line"), mute: css("--mute"), faint: css("--faint"), ink: css("--ink"), ground: css("--ground") };
+  const num = (v, d = 1) => v.toFixed(d).replace(".", ",");
+
+  function el(tag, attrs, parent) {
+    const n = document.createElementNS(NS, tag);
+    for (const k in attrs) n.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(n);
+    return n;
+  }
+
+  /* ---------- API ---------- */
+  async function api(path, body) {
+    const r = await fetch(path, { method: body ? "POST" : "GET", headers: { "X-Token": TOKEN, "Content-Type": "application/json" },
+                                  body: body ? JSON.stringify(body) : undefined });
+    return r.json();
+  }
+
+  let S = null;          // Einstellungen, Modi
+  let live = { bridge: false };
+  let target = null;     // Profil, das die Regler bearbeiten = das gerade aktive
+
+  /* ---------- Regler-Definition ---------- */
+  const SPEC = {
+    brake_start:      { min: 0, max: 8, step: 1, fmt: (v) => `Zone ${v}` },
+    brake_force:      { min: 1, max: 8, step: 1, fmt: (v) => `${v} / 8` },
+    gas_force:        { min: 0, max: 8, step: 1, fmt: (v) => v ? `${v} / 8` : "aus" },
+    abs_strength:     { min: 0, max: 8, step: 1, fmt: (v) => v ? `${v} / 8` : "aus" },
+    abs_frequency:    { min: 5, max: 60, step: 1, fmt: (v) => `${v} Hz` },
+    spin_strength:    { min: 0, max: 8, step: 1, fmt: (v) => v ? `${v} / 8` : "aus" },
+    l2_deadzone:      { min: 0, max: 0.2, step: 0.01, fmt: (v) => `${Math.round(v * 100)} %` },
+    r2_deadzone:      { min: 0, max: 0.2, step: 0.01, fmt: (v) => `${Math.round(v * 100)} %` },
+    l2_curve:         { min: 0.5, max: 3, step: 0.1, fmt: (v) => num(v) },
+    r2_curve:         { min: 0.5, max: 3, step: 0.1, fmt: (v) => num(v) },
+    rumble_gain:      { min: 0, max: 2, step: 0.05, fmt: (v) => `${Math.round(v * 100)} %` },
+    stick_deadzone:   { min: 0, max: 0.25, step: 0.01, fmt: (v) => `${Math.round(v * 100)} %` },
+    stick_outer:      { min: 0, max: 0.25, step: 0.01, fmt: (v) => `${Math.round(v * 100)} %` },
+    anti_deadzone:    { min: 0, max: 0.4, step: 0.01, fmt: (v) => `${Math.round(v * 100)} %` },
+    gyro_sensitivity: { min: 0.2, max: 4, step: 0.1, fmt: (v) => num(v) },
+    gyro_min:         { min: 0, max: 0.4, step: 0.01, fmt: (v) => `${Math.round(v * 100)} %` },
+  };
+  const P = () => (S && target && S.settings.profiles[target]) || {};
+
+  const pending = {};
+  let saveTimer = null;
+  function change(key, value) {
+    if (!target) return;
+    S.settings.profiles[target][key] = value;
+    pending[key] = value;
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(async () => {
+      const changes = { ...pending }; for (const k in pending) delete pending[k];
+      S = await api("/api/profile", { name: target, changes });
+    }, 220);
+    drawStatic();
+  }
+
+  Object.entries(SPEC).forEach(([key, sp]) => {
+    const input = $(key);
+    Object.assign(input, { min: sp.min, max: sp.max, step: sp.step });
+    input.addEventListener("input", () => { showSlider(key); change(key, +input.value); });
+  });
+  function showSlider(key) {
+    const input = $(key), sp = SPEC[key], v = +input.value;
+    document.querySelector(`output[for="${key}"]`).textContent = sp.fmt(v);
+    input.style.setProperty("--p", `${(v - sp.min) / (sp.max - sp.min) * 100}%`);
+  }
+  ["gyro_invert_x", "gyro_invert_y"].forEach((k) => $(k).addEventListener("change", () => change(k, $(k).checked)));
+
+  function buildSeg(seg, options) {
+    seg.innerHTML = "";
+    Object.entries(options).forEach(([val, label]) => {
+      const b = document.createElement("button"); b.type = "button"; b.textContent = label; b.dataset.val = val;
+      b.addEventListener("click", () => { change(seg.dataset.key, val); fillControls(); });
+      seg.appendChild(b);
+    });
+  }
+
+  function fillControls() {
+    const p = P(); if (!p.triggers) return;
+    Object.keys(SPEC).forEach((k) => { $(k).value = p[k]; showSlider(k); });
+    $("gyro_invert_x").checked = !!p.gyro_invert_x; $("gyro_invert_y").checked = !!p.gyro_invert_y;
+    [$("modeSeg"), $("gyroSeg")].forEach((seg) => seg.querySelectorAll("button").forEach((b) =>
+      b.setAttribute("aria-pressed", b.dataset.val === p[seg.dataset.key])));
+    const racing = p.triggers === "racing" || p.triggers === "racing_live";
+    $("brakePanel").classList.toggle("dim", !racing); $("gasPanel").classList.toggle("dim", !racing);
+    ["abs_strength", "abs_frequency", "spin_strength"].forEach((k) => $(k).closest(".row").classList.toggle("dim", p.triggers !== "racing_live"));
+    if (document.activeElement !== $("games")) $("games").value = (p.games || []).join(", ");
+    const hint = `Profil ${target}`;
+    ["editHintT", "editHintG", "editHintP"].forEach((id) => $(id).textContent = hint);
+    $("autoGame").checked = S.settings.auto_game;
+    renderCards();
+    drawStatic();
+  }
+
+  /* ---------- Profile ---------- */
+  function renderCards() {
+    const cards = $("cards"); cards.innerHTML = "";
+    Object.entries(S.settings.profiles).forEach(([name, p]) => {
+      const b = document.createElement("button"); b.type = "button"; b.className = "card" + (name === target ? " on" : "");
+      const gyro = p.gyro !== "aus" ? ` · Gyro ${S.gyro_modes[p.gyro]}` : "";
+      b.innerHTML = `<h3></h3><span class="hint"></span><span class="hint" style="font-family:var(--mono)"></span>`;
+      b.children[0].textContent = name;
+      b.children[1].textContent = `${S.modes[p.triggers] || p.triggers}${gyro}`;
+      b.children[2].textContent = (p.games || []).length ? p.games.join(", ") : "keine Spiele zugeordnet";
+      b.addEventListener("click", () => selectProfile(name));
+      cards.appendChild(b);
+    });
+  }
+  async function selectProfile(name) {
+    S = await api("/api/active", { name });
+    target = name; fillControls(); updateHeader();
+    $("profileMenu").hidden = true; $("profileBtn").setAttribute("aria-expanded", "false");
+  }
+  function profileMsg(text) { $("profileMsg").textContent = text || ""; $("profileMsg").hidden = !text; }
+  $("newBtn").addEventListener("click", async () => {
+    const r = await api("/api/profile/new", { name: $("newName").value, from: target });
+    if (r.error) return profileMsg(r.error);
+    S = r; target = S.settings.active; $("newName").value = ""; profileMsg(""); fillControls(); updateHeader();
+  });
+  let delArmed = false;
+  $("delBtn").addEventListener("click", async () => {
+    if (Object.keys(S.settings.profiles).length <= 1) return profileMsg("Das letzte Profil bleibt.");
+    if (!delArmed) { delArmed = true; $("delBtn").textContent = `„${target}“ wirklich löschen?`; setTimeout(() => { delArmed = false; $("delBtn").textContent = "Profil löschen"; }, 3000); return; }
+    delArmed = false; $("delBtn").textContent = "Profil löschen";
+    S = await api("/api/profile/delete", { name: target }); target = S.settings.active; profileMsg(""); fillControls(); updateHeader();
+  });
+  $("games").addEventListener("change", () => change("games", $("games").value.split(",").map((g) => g.trim().toLowerCase()).filter(Boolean)));
+  $("autoGame").addEventListener("change", async () => { S = await api("/api/auto", { on: $("autoGame").checked }); });
+
+  $("profileBtn").addEventListener("click", () => {
+    const m = $("profileMenu"); m.hidden = !m.hidden; $("profileBtn").setAttribute("aria-expanded", String(!m.hidden));
+    if (m.hidden) return;
+    m.innerHTML = "";
+    Object.keys(S.settings.profiles).forEach((name) => {
+      const b = document.createElement("button"); b.type = "button";
+      b.innerHTML = `<span></span><span class="check">${name === target ? "●" : ""}</span>`;
+      b.children[0].textContent = name; b.addEventListener("click", () => selectProfile(name)); m.appendChild(b);
+    });
+    if (live.game && S.settings.auto_game) {
+      const n = document.createElement("div"); n.className = "note";
+      n.textContent = `Läuft ${live.game}, gilt automatisch das zugeordnete Profil. Abschalten im Tab Profile.`; m.appendChild(n);
+    }
+  });
+  document.addEventListener("click", (e) => { if (!e.target.closest(".head-right")) { $("profileMenu").hidden = true; $("profileBtn").setAttribute("aria-expanded", "false"); } });
+
+  /* ---------- Tabs ---------- */
+  document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach((o) => o.setAttribute("aria-selected", o === t));
+    document.querySelectorAll(".view").forEach((v) => v.hidden = v.id !== "view-" + t.dataset.view);
+    try { localStorage.setItem("tab", t.dataset.view); } catch (e) {}
+    drawStatic();
+  }));
+
+  /* ---------- Zeichnungen ---------- */
+  function buildScope(svg, withLabel) {
+    const p = P(); svg.innerHTML = "";
+    const dz = p.stick_deadzone ?? 0.08, outer = p.stick_outer ?? 0;
+    const ring = el("circle", { r: 50, fill: C.ground, stroke: C.line, "stroke-width": 1.5 }, svg);
+    el("circle", { r: 50 * (1 - outer), fill: "none", stroke: C.light, "stroke-opacity": .45, "stroke-dasharray": "2 3" }, svg);
+    el("circle", { r: Math.max(0.5, 50 * dz), fill: C.faint, "fill-opacity": .35 }, svg);
+    el("line", { x1: -50, y1: 0, x2: 50, y2: 0, stroke: C.line }, svg);
+    el("line", { x1: 0, y1: -50, x2: 0, y2: 50, stroke: C.line }, svg);
+    const trail = el("polyline", { fill: "none", stroke: C.light, "stroke-opacity": .35, "stroke-width": 1.5, "stroke-linecap": "round" }, svg);
+    const dot = el("circle", { r: withLabel ? 5 : 6, fill: C.light }, svg);
+    return { ring, dot, trail, pts: [] };
+  }
+  function moveScope(s, x, y, pressed) {
+    const px = x * 50, py = -y * 50;
+    s.dot.setAttribute("cx", px); s.dot.setAttribute("cy", py);
+    s.pts.push(`${px.toFixed(1)},${py.toFixed(1)}`); if (s.pts.length > 20) s.pts.shift();
+    s.trail.setAttribute("points", s.pts.join(" "));
+    s.ring.setAttribute("stroke", pressed ? C.light : C.line);
+  }
+  function buildBar(svg, brake) {
+    svg.innerHTML = "";
+    el("rect", { x: 5, y: 2, width: 24, height: 146, rx: 5, fill: C.ground, stroke: C.line }, svg);
+    for (let z = 1; z < 10; z++) el("line", { x1: 5, x2: 9, y1: 2 + z * 14.6, y2: 2 + z * 14.6, stroke: C.faint }, svg);
+    const fill = el("rect", { x: 6, width: 22, rx: 4, fill: brake ? C.slip : C.grip }, svg);
+    let mark = null;
+    const p = P();
+    if (brake && (p.triggers === "racing" || p.triggers === "racing_live")) {
+      const y = 147 - 144 * (p.brake_start / 10);
+      mark = el("line", { x1: 0, x2: 34, y1: y, y2: y, stroke: C.ink, "stroke-width": 1.5, "stroke-dasharray": "3 2" }, svg);
+    }
+    return { fill };
+  }
+  function setBar(b, v, color) {
+    const h = 144 * Math.max(0, Math.min(1, v));
+    b.fill.setAttribute("y", 147 - h); b.fill.setAttribute("height", h); b.fill.setAttribute("fill", color);
+  }
+  // PlayStation-Name zuerst, Xbox-Gegenstueck in Klammern.
+  const KEYS = [["a", "✕ (A)"], ["b", "○ (B)"], ["x", "□ (X)"], ["y", "△ (Y)"], ["lb", "L1 (LB)"], ["rb", "R1 (RB)"],
+                ["dpad_up", "▲"], ["dpad_down", "▼"], ["dpad_left", "◀"], ["dpad_right", "▶"],
+                ["back", "Create (Back)"], ["start", "Options (Start)"], ["guide", "PS (Guide)"]];
+  KEYS.forEach(([k, label]) => { const s = document.createElement("span"); s.className = "key"; s.textContent = label; s.dataset.k = k; $("keys").appendChild(s); });
+
+  function buildCar(svg) {
+    svg.innerHTML = "";
+    el("rect", { x: 30, y: 12, width: 60, height: 166, rx: 26, fill: C.ground, stroke: C.line, "stroke-width": 1.5 }, svg);
+    el("rect", { x: 40, y: 52, width: 40, height: 34, rx: 8, fill: "none", stroke: C.line }, svg);
+    el("rect", { x: 40, y: 104, width: 40, height: 40, rx: 8, fill: "none", stroke: C.line }, svg);
+    return [[12, 30, "VL"], [92, 30, "VR"], [12, 128, "HL"], [92, 128, "HR"]].map(([x, y, l]) => {
+      const r = el("rect", { x, y, width: 16, height: 34, rx: 4, fill: C.faint }, svg);
+      const t = el("text", { x: x + 8, y: y + 48, "text-anchor": "middle", fill: C.mute, "font-size": 8, "font-family": "JetBrains Mono, monospace" }, svg);
+      t.textContent = l; return r;
+    });
+  }
+  const slipColor = (s) => s < 0.9 ? C.grip : s < 1.2 ? C.abs : C.slip;
+
+  function drawZones(svg, start, force, brake, active) {
+    svg.innerHTML = "";
+    for (let z = 0; z < 10; z++) {
+      const x = z * 40 + 2;
+      el("rect", { x, y: 10, width: 36, height: 100, rx: 4, fill: C.ground, stroke: C.line }, svg);
+      if (active && z >= start && force > 0) {
+        const h = 100 * force / 8;
+        el("rect", { x, y: 110 - h, width: 36, height: h, rx: 4, fill: brake ? C.slip : C.grip, "fill-opacity": .75 }, svg);
+      }
+      const t = el("text", { x: x + 18, y: 128, "text-anchor": "middle", fill: C.mute, "font-size": 11, "font-family": "JetBrains Mono, monospace" }, svg);
+      t.textContent = z;
+    }
+    if (brake && active) {
+      const x = start * 40;
+      el("line", { x1: x, x2: x, y1: 2, y2: 114, stroke: C.ink, "stroke-width": 2 }, svg);
+      const t = el("text", { x: x + 4, y: 146, fill: C.ink, "font-size": 11, "font-family": "Instrument Sans, sans-serif" }, svg);
+      t.textContent = "Druckpunkt";
+    } else {
+      const t = el("text", { x: 2, y: 146, fill: C.mute, "font-size": 11, "font-family": "Instrument Sans, sans-serif" }, svg);
+      t.textContent = active ? "Ruhe → durchgedrückt" : "Kein Widerstand in diesem Modus";
+    }
+    return el("rect", { x: 0, y: 6, width: 3, height: 108, fill: C.ink, rx: 1.5 }, svg);
+  }
+  function drawCurve(svg, fn, label) {
+    svg.innerHTML = "";
+    const W = 200, H = 120, ox = 14, oy = 128;
+    el("rect", { x: ox, y: oy - H, width: W, height: H, fill: C.ground, stroke: C.line }, svg);
+    for (let i = 1; i < 4; i++) {
+      el("line", { x1: ox + W * i / 4, x2: ox + W * i / 4, y1: oy - H, y2: oy, stroke: C.line, "stroke-opacity": .6 }, svg);
+      el("line", { x1: ox, x2: ox + W, y1: oy - H * i / 4, y2: oy - H * i / 4, stroke: C.line, "stroke-opacity": .6 }, svg);
+    }
+    el("line", { x1: ox, y1: oy, x2: ox + W, y2: oy - H, stroke: C.faint, "stroke-dasharray": "3 3" }, svg);
+    let d = "";
+    for (let i = 0; i <= 100; i++) { const x = i / 100; d += `${i ? "L" : "M"}${(ox + x * W).toFixed(1)},${(oy - fn(x) * H).toFixed(1)}`; }
+    el("path", { d, fill: "none", stroke: C.light, "stroke-width": 2.5 }, svg);
+    const dot = el("circle", { r: 4, fill: C.ink, cx: ox, cy: oy }, svg);
+    const t = el("text", { x: ox, y: 146, fill: C.mute, "font-size": 10, "font-family": "JetBrains Mono, monospace" }, svg);
+    t.textContent = label;
+    return { dot, set(x) { dot.setAttribute("cx", ox + x * W); dot.setAttribute("cy", oy - fn(x) * H); } };
+  }
+  const trigFn = (dz, curve) => (x) => x <= dz ? 0 : Math.pow((x - dz) / (1 - dz), curve);
+  const stickFn = (m) => {
+    const p = P(), dz = p.stick_deadzone ?? 0.08, outer = p.stick_outer ?? 0, anti = p.anti_deadzone ?? 0;
+    if (m <= dz) return 0;
+    const v = Math.min(1, (m - dz) / Math.max(1e-6, 1 - dz - outer));
+    return anti > 0 ? anti + (1 - anti) * v : v;
+  };
+
+  /* Reichweite */
+  let reach = null, measuring = null;
+  function drawReach() {
+    const svg = $("reach"); svg.innerHTML = "";
+    [0.25, 0.5, 0.75, 1].forEach((r) => el("circle", { r: 60 * r, fill: "none", stroke: C.line }, svg));
+    const src = measuring ? measuring.best : reach;
+    if (src && src.some((v) => v > 0)) {
+      let d = "";
+      src.forEach((r, i) => { const a = (i / 16) * Math.PI * 2 - Math.PI / 2; d += `${i ? "L" : "M"}${(Math.cos(a) * 60 * r).toFixed(1)},${(Math.sin(a) * 60 * r).toFixed(1)}`; });
+      el("path", { d: d + "Z", fill: C.light, "fill-opacity": .18, stroke: C.light, "stroke-width": 1.5 }, svg);
+    }
+    el("circle", { r: 60 * (1 - (P().stick_outer ?? 0)), fill: "none", stroke: C.abs, "stroke-dasharray": "3 3" }, svg);
+  }
+  const DIRS = ["links", "links oben", "oben links", "oben", "oben", "oben rechts", "rechts oben", "rechts", "rechts", "rechts unten", "unten rechts", "unten", "unten", "unten links", "links unten", "links"];
+  $("reachBtn").addEventListener("click", () => {
+    if (!live.bridge) { $("reachText").textContent = "Kein Controller verbunden."; return; }
+    measuring = { until: performance.now() + 6000, best: new Array(16).fill(0), bestR: new Array(16).fill(0) };
+    $("reachBtn").disabled = true;
+  });
+  function sampleReach(raw) {
+    const add = (arr, x, y) => {
+      const m = Math.hypot(x, y); if (m < 0.6) return;
+      const s = Math.floor(((Math.atan2(y, x) + Math.PI) / (2 * Math.PI)) * 16) % 16;
+      arr[s] = Math.max(arr[s], Math.min(1.1, m));
+    };
+    add(measuring.best, raw.lx, raw.ly); add(measuring.bestR, raw.rx, raw.ry);
+    const rest = Math.max(0, (measuring.until - performance.now()) / 1000);
+    const cov = (a) => Math.round(a.filter((v) => v > 0).length / 16 * 100);
+    $("reachText").textContent = `Beide Sticks am Anschlag kreisen lassen – noch ${num(rest)} s · links ${cov(measuring.best)} % · rechts ${cov(measuring.bestR)} %`;
+    if (rest > 0) return;
+    const L = measuring.best, R = measuring.bestR;
+    $("reachBtn").disabled = false;
+    if (L.some((v) => !v) || R.some((v) => !v)) {
+      $("reachText").textContent = "Nicht alle Richtungen erreicht – bitte nochmal, ganz rundherum.";
+      measuring = null; return;
+    }
+    const weakest = Math.min(...L, ...R);
+    const outer = Math.round(Math.max(0, Math.min(0.25, 1 - Math.min(1, weakest) + 0.01)) * 100) / 100;
+    reach = L.map((v) => Math.min(1, v));
+    const li = L.indexOf(Math.min(...L));
+    $("reachText").innerHTML = "";
+    $("reachText").append(`Schwächste Richtung: `, Object.assign(document.createElement("b"), { textContent: `${DIRS[li]}, ${Math.round(Math.min(1, weakest) * 100)} %`, style: "color:var(--ink)" }),
+      ` – äußere Zone auf ${Math.round(outer * 100)} % gesetzt, damit dort trotzdem voller Ausschlag ankommt.`);
+    measuring = null;
+    $("stick_outer").value = outer; showSlider("stick_outer"); change("stick_outer", outer);
+  }
+
+  let gyroDot = null;
+  function drawGyro() {
+    const svg = $("gyroPad"), p = P(); svg.innerHTML = "";
+    el("rect", { x: -55, y: -55, width: 110, height: 110, rx: 10, fill: C.ground, stroke: C.line }, svg);
+    el("circle", { r: 50 * (p.gyro_min ?? 0.15), fill: "none", stroke: C.faint, "stroke-dasharray": "2 2" }, svg);
+    el("line", { x1: -8, x2: 8, y1: 0, y2: 0, stroke: C.mute }, svg);
+    el("line", { y1: -8, y2: 8, x1: 0, x2: 0, stroke: C.mute }, svg);
+    gyroDot = el("circle", { r: 4, fill: C.light }, svg);
+  }
+
+  let scopes = {}, bars = {}, tires = [], zonePos = {}, curves = {};
+  function drawStatic() {
+    const p = P();
+    scopes.L = buildScope($("scopeL")); scopes.R = buildScope($("scopeR")); scopes.big = buildScope($("scopeBig"), true);
+    bars.L2 = buildBar($("barL2"), true); bars.R2 = buildBar($("barR2"), false);
+    tires = buildCar($("car"));
+    const racing = p.triggers === "racing" || p.triggers === "racing_live";
+    zonePos.L2 = drawZones($("zonesL2"), p.brake_start ?? 3, p.brake_force ?? 6, true, racing);
+    zonePos.R2 = drawZones($("zonesR2"), 1, p.gas_force ?? 2, false, racing);
+    curves.L2 = drawCurve($("curveL2"), trigFn(p.l2_deadzone ?? 0, p.l2_curve ?? 1), "Eingang → Ausgabe");
+    curves.R2 = drawCurve($("curveR2"), trigFn(p.r2_deadzone ?? 0, p.r2_curve ?? 1), "Eingang → Ausgabe");
+    curves.stick = drawCurve($("curveStick"), stickFn, "Stickweg → Ausgabe");
+    drawReach(); drawGyro();
+  }
+
+  /* ---------- Kopfzeile ---------- */
+  function setNode(led, sub, cls, text) { $(led).className = "led " + cls; $(sub).textContent = text; }
+  function updateHeader() {
+    const s = live;
+    if (s.bridge) {
+      setNode("ledDs", "subDs", "ok", `${s.link} · ${s.rate} Hz`);
+      setNode("ledBr", "subBr", "ok", `${num(s.proc_ms, 2)} ms`);
+      setNode("ledXp", "subXp", s.slot != null ? "ok" : "warn", s.slot != null ? `Slot ${s.slot + 1}` : "kein Slot");
+    } else {
+      setNode("ledDs", "subDs", s.controller ? "warn" : "bad", s.controller ? `${s.controller} · verbindet` : "nicht gefunden");
+      setNode("ledBr", "subBr", "warn", s.controller ? "startet …" : "wartet auf Controller");
+      setNode("ledXp", "subXp", "bad", "kein Pad");
+    }
+    $("profileName").textContent = s.profile || (S && S.settings.active) || "–";
+    const chip = $("autoChip");
+    chip.hidden = !s.game;
+    if (s.game) chip.textContent = `${s.game.replace(/\.exe$/, "")} erkannt`;
+    $("battery").hidden = s.battery == null;
+    if (s.battery != null) {
+      $("battFill").style.width = `${s.battery}%`;
+      $("battFill").style.background = s.battery <= 20 ? C.slip : s.battery <= 50 ? C.abs : C.grip;
+      $("battText").textContent = s.full ? "voll" : `${s.battery} %${s.charging ? " ⚡" : ""}`;
+    }
+  }
+
+  /* ---------- Verlauf ---------- */
+  const hist = [];
+  const canvas = $("timeline"), ctx = canvas.getContext("2d");
+  function drawTimeline() {
+    const W = canvas.width, H = canvas.height, pad = 8;
+    ctx.clearRect(0, 0, W, H);
+    ctx.strokeStyle = C.line; ctx.lineWidth = 1;
+    for (let i = 1; i < 4; i++) { const y = pad + (H - 2 * pad) * i / 4; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+    if (hist.length < 2) return;
+    const now = performance.now(), span = 8000;
+    const X = (t) => W - (now - t) / span * W, Y = (v) => H - pad - v * (H - 2 * pad);
+    ctx.fillStyle = "rgba(255,176,32,.16)";
+    hist.forEach((h, i) => { if (h.abs && i) { const x0 = X(hist[i - 1].t); ctx.fillRect(x0, 0, X(h.t) - x0 + 1, H); } });
+    const line = (key, color) => {
+      ctx.beginPath(); hist.forEach((h, i) => { const x = X(h.t), y = Y(h[key]); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+      ctx.strokeStyle = color; ctx.lineWidth = 3; ctx.stroke();
+    };
+    line("r2", C.grip); line("l2", C.slip);
+    const last = hist[hist.length - 1];
+    [["l2", C.slip], ["r2", C.grip]].forEach(([k, c]) => { ctx.beginPath(); ctx.arc(X(last.t) - 4, Y(last[k]), 5, 0, 7); ctx.fillStyle = c; ctx.fill(); });
+  }
+
+  /* ---------- Live-Bild ---------- */
+  function render(s) {
+    const prevProfile = live.profile;
+    live = s;
+    updateHeader();
+    // Profil hat gewechselt (Spiel erkannt, Tray): Regler nachziehen.
+    if (s.profile && s.profile !== target && S) {
+      api("/api/settings").then((r) => { S = r; target = s.profile; fillControls(); });
+    }
+    const pulse = s.bridge && s.abs > 0 && (Math.floor(performance.now() / (1000 / Math.min(P().abs_frequency || 20, 12) / 2)) % 2 === 0);
+    $("lightbar").className = "lightbar" + (!s.bridge ? " off" : pulse ? " abs" : "");
+    $("brand").classList.toggle("abs", !!pulse);
+
+    const o = s.out || { lx: 0, ly: 0, rx: 0, ry: 0, lt: 0, rt: 0, buttons: [] };
+    const raw = s.raw || { lx: 0, ly: 0, rx: 0, ry: 0, l2: 0, r2: 0 };
+    const btn = new Set(o.buttons);
+    moveScope(scopes.L, o.lx, o.ly, btn.has("l3"));
+    moveScope(scopes.R, o.rx, o.ry, btn.has("r3"));
+    moveScope(scopes.big, raw.lx, raw.ly, false);
+    curves.stick.set(Math.min(1, Math.hypot(raw.lx, raw.ly)));
+    setBar(bars.L2, o.lt, s.abs > 0 && pulse ? C.abs : C.slip);
+    setBar(bars.R2, o.rt, s.spin > 0 ? C.abs : C.grip);
+    document.querySelectorAll(".key").forEach((k) => k.classList.toggle("on", btn.has(k.dataset.k)));
+    zonePos.L2.setAttribute("x", raw.l2 * 398); zonePos.R2.setAttribute("x", raw.r2 * 398);
+    curves.L2.set(raw.l2); curves.R2.set(raw.r2);
+
+    const t = s.tele || {};
+    $("telePort").textContent = $("telePort2").textContent = t.port || 5300;
+    $("speed").firstChild.nodeValue = t.fresh ? Math.round(t.speed * 3.6) : "–";
+    tires.forEach((r, i) => r.setAttribute("fill", t.fresh ? slipColor(Math.abs(t.slip[i])) : C.faint));
+    $("chipAbs").classList.toggle("abs-on", s.abs > 0);
+    $("chipSpin").classList.toggle("spin-on", s.spin > 0);
+    const teleCls = t.error ? "chip" : t.fresh ? "chip ok" : t.seen ? "chip warn" : "chip";
+    const teleTxt = t.error ? "Port belegt" : t.fresh ? "Empfängt" : t.seen ? "Kein Rennen" : "Keine Daten";
+    $("chipTele").className = teleCls; $("chipTele").textContent = t.fresh ? "Data Out" : teleTxt;
+    $("teleState").className = teleCls; $("teleState").textContent = t.error || teleTxt;
+    $("teleSetup").hidden = !!t.fresh;
+
+    const g = s.gyro || { x: 0, y: 0, active: false };
+    if (gyroDot) {
+      const full = 150 / (P().gyro_sensitivity || 1);
+      const gx = Math.max(-1, Math.min(1, g.x / full)), gy = Math.max(-1, Math.min(1, g.y / full));
+      gyroDot.setAttribute("cx", gx * 50); gyroDot.setAttribute("cy", -gy * 50);
+      gyroDot.setAttribute("fill", g.active ? C.light : C.faint);
+    }
+    $("gyroState").textContent = g.active ? "aktiv – Drehung steuert den rechten Stick" : P().gyro === "l2" ? "wartet auf L2 (Zielen)" : P().gyro === "aus" ? "aus" : "Drehung → rechter Stick";
+
+    if (measuring && s.raw) sampleReach(s.raw);
+    if (measuring) drawReach();
+
+    const now = performance.now();
+    hist.push({ t: now, l2: o.lt, r2: o.rt, abs: s.abs > 0 });
+    while (hist.length && now - hist[0].t > 8200) hist.shift();
+    drawTimeline();
+  }
+
+  /* ---------- Verbindung ---------- */
+  let es = null, offlineTimer = null;
+  function connect() {
+    es = new EventSource(`/api/stream?t=${encodeURIComponent(TOKEN)}`);
+    es.onmessage = (e) => {
+      clearTimeout(offlineTimer); offlineTimer = null; $("offline").hidden = true;
+      render(JSON.parse(e.data));
+    };
+    es.onerror = () => {
+      if (!offlineTimer) offlineTimer = setTimeout(() => { $("offline").hidden = false; live = { bridge: false }; updateHeader(); $("lightbar").className = "lightbar off"; }, 2500);
+    };
+  }
+
+  async function start() {
+    buildSeg($("modeSeg"), { aus: "Aus", racing: "Racing", racing_live: "Racing + Feedback", shooter: "Shooter" });
+    buildSeg($("gyroSeg"), { aus: "Aus", l2: "Beim Zielen (L2)", immer: "Immer" });
+    try {
+      S = await api("/api/settings");
+      buildSeg($("modeSeg"), S.modes); buildSeg($("gyroSeg"), S.gyro_modes);
+      target = S.settings.active;
+    } catch (e) { $("offline").hidden = false; }
+    try { const tab = localStorage.getItem("tab"); if (tab && $("tab-" + tab)) $("tab-" + tab).click(); } catch (e) {}
+    fillControls(); drawStatic(); updateHeader();
+    connect();
+  }
+
+  $("absTest").addEventListener("click", () => api("/api/abs-test", {}));
+  $("recal").addEventListener("click", () => api("/api/recalibrate", {}));
+  start();
+})();
+</script>
+</body>
+</html>

@@ -72,7 +72,14 @@ class Bridge:
         self.gyro = GyroAim()
         self.tele: Telemetry | None = None
         self._pedals = (0, 0)
-        self._status: dict | None = None
+
+        # Live-Werte fuers Cockpit (webui.py liest sie direkt aus).
+        self.last_x = None                 # XPad, so wie das Spiel ihn sieht
+        self.gyro_active = False
+        self.feedback = (0.0, 0.0)         # ABS, Durchdrehen je 0..1
+        self.report_rate = 0.0
+        self.proc_ms = 0.0                 # Report gelesen -> Pad aktualisiert
+        self.abs_test_until = 0.0
         self._wanted: tuple[str, str] | None = None
         self._applied: tuple[str, str] | None = None
         self._triggers_sent: tuple[bytes, bytes] | None = None
@@ -150,7 +157,12 @@ class Bridge:
     def _with_triggers(self, rep):
         """Haengt die Trigger-Effekte an, aber nur wenn sie sich geaendert
         haben - sonst wuerde jeder Rumble-Report sie neu anstossen."""
-        eff = self.trig.effects(self._rumble, *self._pedals, self.tele)
+        lv = self.trig.levels(self._rumble, *self._pedals, self.tele)
+        eff = self.trig.effects(self._rumble, *self._pedals, self.tele, lv)
+        if time.time() < self.abs_test_until:
+            # Test-Knopf im Cockpit: L2 pulsiert kurz, egal welcher Modus.
+            eff, lv = (self.trig.abs_pulse(), eff[1]), (1.0, lv[1])
+        self.feedback = lv
         if eff != self._triggers_sent:
             self._triggers_sent = eff
             rep.triggers(*eff)
@@ -159,7 +171,12 @@ class Bridge:
     def _watch(self) -> None:
         """Hintergrund: welches Profil soll gerade gelten?"""
         last_m, data = None, None
+        last_n, last_t = self.ds.reports, time.time()
         while not self._closing.is_set():
+            now = time.time()
+            self.report_rate = ((self.ds.reports - last_n)
+                                / max(now - last_t, 1e-3))
+            last_n, last_t = self.ds.reports, now
             try:
                 m = settings.mtime()
                 if m != last_m:
@@ -171,24 +188,9 @@ class Bridge:
                                            sort_keys=True))
                 if wanted != self._wanted:
                     self._wanted = wanted
-                self._publish(name)
             except Exception:
                 pass
             self._closing.wait(1.5)
-
-    def _publish(self, name: str) -> None:
-        """Status fuers Anzeigefenster - nur schreiben, wenn sich was aendert."""
-        t = self.tele
-        status = {
-            "profile": name,
-            "game": self.game,
-            "telemetry": bool(t and t.fresh),
-            "telemetry_seen": bool(t and t.seen),
-            "telemetry_error": t.error if t else None,
-        }
-        if status != self._status:
-            self._status = status
-            settings.write_status(status)
 
     def _check_settings(self) -> None:
         wanted = self._wanted
@@ -262,9 +264,11 @@ class Bridge:
                 # Timeout haelt Rumble und Stop-Abfrage auch ohne Input am Laufen.
                 st = self.ds.poll_latest(timeout_ms=4)
                 if st:
+                    t_read = time.perf_counter()
                     x = map_state(st, self.cfg)
-                    self.gyro.apply(st, x, self.prof)
+                    self.gyro_active = self.gyro.apply(st, x, self.prof)
                     self._pedals = (st.l2, st.r2)
+                    self.last_x = x
                     key = (x.buttons, x.lt, x.rt, x.lx, x.ly, x.rx, x.ry)
                     if key != last_sent:
                         last_sent = key
@@ -275,6 +279,8 @@ class Bridge:
                         r.sThumbLX, r.sThumbLY = x.lx, x.ly
                         r.sThumbRX, r.sThumbRY = x.rx, x.ry
                         self.pad.update()
+                    ms = (time.perf_counter() - t_read) * 1000
+                    self.proc_ms += (ms - self.proc_ms) * 0.05
 
                     now = time.time()
                     if not self.quiet and now - last_draw > 0.05:
@@ -292,7 +298,8 @@ class Bridge:
 
                 # ABS / Durchdrehen: haengt an Pedal und Reifenschlupf, nicht
                 # nur am Rumble - deshalb regelmaessig neu bewerten.
-                if self.trig.live and self.out is not None:
+                testing = time.time() < self.abs_test_until + 0.1
+                if (self.trig.live or testing) and self.out is not None:
                     now = time.time()
                     if now - last_feedback >= FEEDBACK_INTERVAL:
                         last_feedback = now
@@ -311,7 +318,6 @@ class Bridge:
         self._closing.set()
         if self.tele:
             self.tele.close()
-        settings.write_status({})
         try:
             self.pad.reset()
             self.pad.update()

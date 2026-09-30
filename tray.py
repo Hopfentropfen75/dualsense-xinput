@@ -1,20 +1,20 @@
-"""Alles in einem: Bruecke und Batterieanzeige als Tray-Icon.
+"""Alles in einem: Bruecke, Tray-Icon und Cockpit.
 
-Ein einziger Prozess oeffnet den Controller, uebersetzt ihn nach XInput
-und zeigt nebenbei den Akkustand neben der Uhr. Beenden ueber das Menue.
+Ein einziger Prozess oeffnet den Controller, uebersetzt ihn nach XInput,
+zeigt den Akkustand neben der Uhr und stellt das Cockpit-Fenster bereit
+(webui.py). Beenden ueber das Menue.
 """
 
 from __future__ import annotations
 
-import subprocess
 import sys
 import threading
 import time
-from pathlib import Path
 
 import pystray
 
 import settings
+import webui
 from battery import Status, make_icon, windows_light_taskbar
 from bridge import Bridge
 from mapping import Config
@@ -29,6 +29,7 @@ class App:
         self.status = Status()
         self.bridge: Bridge | None = None
         self.error: str | None = None
+        self.cockpit: webui.Cockpit | None = None
 
         self._stop = threading.Event()
         self._wake = threading.Event()
@@ -40,7 +41,7 @@ class App:
             menu=pystray.Menu(
                 pystray.MenuItem(lambda _: self._title(), None, enabled=False),
                 pystray.Menu.SEPARATOR,
-                pystray.MenuItem("Anzeige oeffnen", self._open_monitor,
+                pystray.MenuItem("Cockpit oeffnen", self._open_cockpit,
                                  default=True),
                 pystray.MenuItem("Profil", pystray.Menu(self._profile_items)),
                 pystray.MenuItem("Neu kalibrieren", self._recalibrate),
@@ -62,10 +63,13 @@ class App:
     def _quit(self, *_):
         self._stop.set()
         self._wake.set()
+        if self.cockpit:
+            self.cockpit.close()
         self.icon.stop()
 
-    def _open_monitor(self, *_):
-        open_monitor()
+    def _open_cockpit(self, *_):
+        if self.cockpit:
+            self.cockpit.open()
 
     @staticmethod
     def _profile_items():
@@ -136,7 +140,10 @@ class App:
             self._wake.wait(REFRESH_SECONDS)
             self._wake.clear()
 
-    def run(self) -> None:
+    def run(self, show: bool = True) -> None:
+        self.cockpit = webui.Cockpit(self)
+        if show:
+            self.cockpit.open()
         threading.Thread(target=self._run_bridge, daemon=True).start()
         threading.Thread(target=self._run_ui, daemon=True).start()
         self.icon.run(setup=self._on_ready)
@@ -163,22 +170,11 @@ def _already_running() -> bool:
     return k32.GetLastError() == 183  # ERROR_ALREADY_EXISTS
 
 
-def open_monitor() -> None:
-    """Anzeigefenster als eigener Prozess - tkinter will seinen eigenen
-    Hauptthread. Ist es schon offen, holt es sich selbst nach vorn."""
-    here = Path(__file__).parent
-    exe = Path(sys.executable).with_name("pythonw.exe")
-    subprocess.Popen([str(exe if exe.exists() else sys.executable),
-                      str(here / "monitor.py")], cwd=str(here))
-
-
 if __name__ == "__main__":
-    # Ein Symbol fuer alles: startet die Bruecke und zeigt das Fenster.
-    # Laeuft sie schon, wird nur das Fenster geoeffnet - nie ein zweiter
+    # Ein Symbol fuer alles: startet die Bruecke und zeigt das Cockpit.
+    # Laeuft sie schon, wird nur das Cockpit geoeffnet - nie ein zweiter
     # virtueller Pad. --hidden startet ohne Fenster (z. B. fuer Autostart).
     if _already_running():
-        open_monitor()
+        webui.open_running()
         raise SystemExit(0)
-    if "--hidden" not in sys.argv:
-        open_monitor()
-    App().run()
+    App().run(show="--hidden" not in sys.argv)

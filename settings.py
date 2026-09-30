@@ -17,8 +17,6 @@ import os
 from pathlib import Path
 
 PATH = Path(__file__).with_name("settings.json")
-# Laufzeitstatus der Bruecke fuers Anzeigefenster (Profil, Telemetrie).
-STATUS_PATH = Path(__file__).with_name("status.json")
 TELEMETRY_PORT = 5300
 
 PROFILE_DEFAULTS: dict = {
@@ -129,22 +127,6 @@ def effective(data: dict, game_profile: str | None) -> str:
     if data["auto_game"] and game_profile in data["profiles"]:
         return game_profile
     return data["active"]
-
-
-def write_status(status: dict) -> None:
-    try:
-        tmp = STATUS_PATH.with_suffix(".stmp")
-        tmp.write_text(json.dumps(status), encoding="utf-8")
-        os.replace(tmp, STATUS_PATH)
-    except OSError:
-        pass
-
-
-def read_status() -> dict:
-    try:
-        return json.loads(STATUS_PATH.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {}
 
 
 def mtime() -> float:
