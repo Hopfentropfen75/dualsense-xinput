@@ -1,5 +1,5 @@
 # Laufzeit (Windows, Python 3.11+)
 hidapi>=0.14
-vgamepad>=0.1      # bringt den ViGEmBus-Treiber fuer den virtuellen Pad mit
+vgamepad>=0.1      # startet beim Installieren den ViGEmBus-Treiber-Setup
 pystray>=0.19
 Pillow>=10.1

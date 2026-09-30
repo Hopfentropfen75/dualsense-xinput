@@ -30,7 +30,16 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.14"
-      - run: python -m pip install -r requirements.txt pyinstaller
+      - run: python -m pip install hidapi pystray Pillow pyinstaller
+      # vgamepad gibt es nur als Quellpaket, dessen setup.py den
+      # ViGEmBus-Installer startet - der wartet auf dem Runner ewig auf
+      # einen Klick. Deshalb nur entpacken und per PYTHONPATH einbinden.
+      - name: vgamepad ohne Treiber-Installer
+        shell: bash
+        run: |
+          curl -sL https://files.pythonhosted.org/packages/source/v/vgamepad/vgamepad-0.1.0.tar.gz | tar xz
+          echo "PYTHONPATH=$(pwd)/vgamepad-0.1.0" >> "$GITHUB_ENV"
+      - run: python -c "import vgamepad.win.vigem_client, os; print(os.path.dirname(vgamepad.__file__))"
       - run: python build.py
       - uses: actions/upload-artifact@v7
         with:
