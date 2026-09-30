@@ -14,8 +14,6 @@ import sys
 import threading
 import time
 
-import vgamepad as vg
-
 import games
 import settings
 import triggers
@@ -27,6 +25,21 @@ from output import OutputChannel
 from telemetry import Telemetry
 
 log = logging.getLogger("dualsense.bridge")
+
+
+def _new_pad():
+    """Virtueller Xbox-Pad. vgamepad verbindet sich schon beim Import mit
+    dem ViGEmBus-Treiber - deshalb erst hier importieren, damit ein
+    fehlender Treiber eine klare Meldung gibt statt eines Absturzes beim
+    Start."""
+    try:
+        import vgamepad as vg
+        return vg.VX360Gamepad()
+    except Exception as e:
+        log.error("ViGEmBus nicht verfuegbar: %s", e)
+        raise RuntimeError(
+            "ViGEmBus-Treiber fehlt. Installieren: "
+            "github.com/nefarius/ViGEmBus/releases") from e
 
 # Farbe der Lightbar, solange die Bruecke laeuft.
 ACTIVE_COLOR = (0, 60, 255)
@@ -56,7 +69,7 @@ class Bridge:
         # Belegte Slots merken, bevor der eigene Pad dazukommt - sonst
         # findet die Erkennung sich selbst in "vorher" wieder.
         self._slots_before = xr.connected()
-        self.pad = vg.VX360Gamepad()
+        self.pad = _new_pad()
         self.out: OutputChannel | None = None
         self.slot: int | None = None
         # Von aussen setzbar (Tray-Menue), wird im Loop abgearbeitet.
