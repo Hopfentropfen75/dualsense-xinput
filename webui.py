@@ -40,6 +40,10 @@ STATE_DIR = Path(os.environ.get("LOCALAPPDATA", str(HERE))) / "DualSenseCockpit"
 INFO = STATE_DIR / "ui.json"
 TITLE = "DualSense Cockpit"
 FPS = 30
+# Fester Port und dauerhaftes Token: ein noch offenes Cockpit-Fenster
+# verbindet sich so von selbst wieder, wenn die Bruecke neu startet - auch
+# beim Wechsel zwischen Quellcode und .exe. Mit Zufallsport blieb es tot.
+PORT = 47811
 GYRO_MODES = {"aus": "Aus", "l2": "Beim Zielen (L2)", "immer": "Immer"}
 FONT_DIR = HERE / "assets"
 # Nur diese Dateien werden ausgeliefert - kein freier Zugriff aufs Dateisystem.
@@ -52,7 +56,7 @@ log = logging.getLogger("dualsense.webui")
 class Cockpit:
     def __init__(self, app):
         self.app = app
-        self.token = secrets.token_urlsafe(18)
+        self.token = _saved_token() or secrets.token_urlsafe(18)
         self._ctl = (0.0, None)
         # HidHide laeuft ueber einen Unterprozess. Den startet nur dieser
         # Hintergrund-Thread - nie ein Server-Thread: waehrend der Unterprozess
@@ -65,24 +69,37 @@ class Cockpit:
         self._hh_error: str | None = None
         threading.Thread(target=self._hh_loop, daemon=True,
                          name="hidhide").start()
-        self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), self._handler())
+        try:
+            self.httpd = ThreadingHTTPServer(("127.0.0.1", PORT),
+                                             self._handler())
+        except OSError:
+            # Port belegt (anderes Programm): ausweichen. Alte Fenster
+            # koennen sich dann nicht wiederverbinden - open() oeffnet neu.
+            log.warning("Port %s belegt - weiche aus", PORT)
+            self.httpd = ThreadingHTTPServer(("127.0.0.1", 0),
+                                             self._handler())
         self.httpd.daemon_threads = True
         self.port = self.httpd.server_address[1]
         threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
         # Damit ein zweiter Start das Fenster dieser Instanz oeffnen kann.
         STATE_DIR.mkdir(parents=True, exist_ok=True)
-        INFO.write_text(json.dumps({"url": self.url}), encoding="utf-8")
+        INFO.write_text(json.dumps({"url": self.url, "token": self.token,
+                                    "running": True}), encoding="utf-8")
 
     @property
     def url(self) -> str:
         return f"http://127.0.0.1:{self.port}/?t={self.token}"
 
     def open(self) -> None:
-        open_window(self.url)
+        # Ein vorhandenes Fenster nur nach vorn holen, wenn es sich auch
+        # verbinden kann - also nur auf dem festen Port.
+        open_window(self.url, reuse=self.port == PORT)
 
     def close(self) -> None:
+        # Token behalten (fuer offene Fenster), nur als beendet markieren.
         try:
-            INFO.unlink()
+            INFO.write_text(json.dumps({"token": self.token,
+                                        "running": False}), encoding="utf-8")
         except OSError:
             pass
         self.httpd.shutdown()
@@ -354,16 +371,27 @@ def _edge() -> str | None:
 def focus_existing() -> bool:
     """Ist das Cockpit schon offen, nur nach vorn holen."""
     user32 = ctypes.windll.user32
-    hwnd = user32.FindWindowW(None, TITLE)
-    if not hwnd:
+    # Nur echte Edge-Fenster: Windows haelt nach dem Schliessen gern ein
+    # Stellvertreter-Fenster des Explorers mit demselben Titel am Leben
+    # (TabProxyWindow) - das "nach vorn zu holen" oeffnet nichts, und das
+    # Cockpit liess sich dann gar nicht mehr oeffnen.
+    hwnd = user32.FindWindowW("Chrome_WidgetWin_1", TITLE)
+    if not hwnd or not user32.IsWindowVisible(hwnd):
         return False
     user32.ShowWindow(hwnd, 9)              # SW_RESTORE, falls minimiert
     user32.SetForegroundWindow(hwnd)
     return True
 
 
-def open_window(url: str) -> None:
-    if focus_existing():
+def _saved_token() -> str | None:
+    try:
+        return json.loads(INFO.read_text(encoding="utf-8")).get("token")
+    except (OSError, ValueError):
+        return None
+
+
+def open_window(url: str, reuse: bool = True) -> None:
+    if reuse and focus_existing():
         return
     edge = _edge()
     if edge is None:
@@ -386,5 +414,5 @@ def open_running() -> bool:
         url = json.loads(INFO.read_text(encoding="utf-8"))["url"]
     except (OSError, ValueError, KeyError):
         return False
-    open_window(url)
+    open_window(url, reuse=f":{PORT}/" in url)
     return True

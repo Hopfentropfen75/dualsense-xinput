@@ -417,7 +417,7 @@
   </div>
 </div>
 
-<div class="overlay" id="offline" hidden><div><h2>Brücke nicht erreichbar</h2><p>Die DualSense-Brücke wurde beendet. Über das Desktop-Symbol „DualSense Controller“ neu starten – dieses Fenster verbindet sich dann von selbst.</p></div></div>
+<div class="overlay" id="offline" hidden><div><h2>Brücke nicht erreichbar</h2><p>Die DualSense-Brücke läuft gerade nicht. Über das Desktop-Symbol „DualSense Controller“ starten – dieses Fenster verbindet sich dann von selbst wieder.</p></div></div>
 
 <script>
 (() => {
@@ -879,6 +879,9 @@
     es = new EventSource(`/api/stream?t=${encodeURIComponent(TOKEN)}`);
     es.onmessage = (e) => {
       lastMsg = performance.now();
+      // War offline und ist wieder da (Bruecke neu gestartet): Einstellungen
+      // frisch holen - sie koennen sich inzwischen geaendert haben.
+      if (!$("offline").hidden) api("/api/settings").then((r) => { S = r; target = S.settings.active; fillControls(); }).catch(() => {});
       clearTimeout(offlineTimer); offlineTimer = null; $("offline").hidden = true;
       render(JSON.parse(e.data));
     };
