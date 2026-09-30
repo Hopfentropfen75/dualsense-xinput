@@ -66,7 +66,7 @@ Rennspiele (Forza Horizon) sortiert.
 - [x] Eigenstaendige DualSense.exe (PyInstaller) mit Installation
 - [x] Generische Profile Standard, Racing, Shooter
 
-- [x] Eingabe-Warteschlange leeren statt Rueckstau (USB 1000 Hz)
+- [x] Eingabe-Warteschlange leeren statt Rueckstau (schadet nicht; USB liefert gemessen 250 Hz, nicht 1000)
 - [x] ViGEm nur bei Aenderung aktualisieren
 - [x] Schutz gegen Doppelstart, Desktop-Verknuepfungen mit Icon
 - [x] Cockpit (Edge-App-Fenster) mit Live-Eingaben, Telemetrie, Verlauf und Profilen

@@ -2,7 +2,7 @@
 
 Drei Abschnitte, jeder so ehrlich wie messbar:
 
-  USB/Bluetooth   Der Controller sendet im festen Takt (USB 1 ms, BT ~4 ms).
+  USB/Bluetooth   Der Controller sendet im festen Takt (USB gemessen 4 ms).
                   Im Mittel wartet eine Eingabe einen halben Takt - aus der
                   gemessenen Reportrate berechnet, nicht gemessen.
   Bruecke         Report gelesen -> an ViGEm uebergeben (gemessen, jeder

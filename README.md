@@ -140,9 +140,9 @@ Richtig verbinden:
 1. Controller vollstaendig ausschalten (PS-Taste ~10s halten)
 2. **danach** das USB-Kabel einstecken
 
-So laeuft er ueber Kabel, laedt dabei, und liefert mit 1000 Hz die
-vierfache Reportrate von Bluetooth. Fuer Bluetooth-Betrieb umgekehrt: Kabel
-abziehen, dann koppeln.
+So laeuft er ueber Kabel und laedt dabei (gemessen: 250 Reports/s, also
+alle 4 ms - die aktuelle Rate zeigt das Cockpit oben in der Kette). Fuer
+Bluetooth-Betrieb umgekehrt: Kabel abziehen, dann koppeln.
 
 Das ist die haeufigste Fehlerquelle ueberhaupt - vor allem, weil das
 Einstecken zum Laden waehrend einer laufenden Bluetooth-Verbindung ganz

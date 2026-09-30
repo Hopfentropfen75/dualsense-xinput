@@ -214,9 +214,10 @@ class DualSense:
         """Wartet bis zu timeout_ms auf einen Report und leert dann die
         Warteschlange, damit nur der neueste zaehlt.
 
-        Ueber USB kommen 1000 Reports/s. Wer pro Durchlauf nur einen liest,
-        faellt knapp zurueck, bis der Windows-Puffer voll ist - dann haengt
-        die Eingabe dauerhaft zig Millisekunden hinterher."""
+        Wer pro Durchlauf nur einen Report liest, faellt zurueck, sobald ein
+        Durchlauf laenger dauert als der Report-Takt (USB gemessen: 4 ms) -
+        dann haengt die Eingabe dauerhaft hinterher, bis der Windows-Puffer
+        voll ist. So zaehlt immer der neueste."""
         data = self.dev.read(78, timeout_ms)
         if not data:
             return None

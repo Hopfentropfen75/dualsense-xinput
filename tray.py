@@ -23,9 +23,9 @@ from bridge import Bridge
 from mapping import Config
 
 REFRESH_SECONDS = 5.0
-# Python gibt anderen Threads sonst nur alle 5 ms die Kontrolle ab - bei
-# 1000 Reports/s koennte ein Controller-Report so lange auf Cockpit, Tray
-# oder Telemetrie warten. 0,5 ms haelt die Eingabe fluessig.
+# Python gibt anderen Threads sonst nur alle 5 ms die Kontrolle ab - ein
+# Controller-Report (USB alle 4 ms) koennte so bis zu 5 ms auf Cockpit,
+# Tray oder Telemetrie warten. 0,5 ms haelt die Eingabe fluessig.
 SWITCH_INTERVAL = 0.0005
 
 log = logging.getLogger("dualsense.tray")

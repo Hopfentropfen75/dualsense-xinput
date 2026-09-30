@@ -272,7 +272,7 @@ class Bridge:
         end = time.time() + duration if duration else None
         last_draw = 0.0
         # Zuletzt an ViGEm gesendeter Zustand. In Ruhe liefert der
-        # Controller 1000x/s dasselbe - das muss nicht jedes Mal in den Treiber.
+        # Controller 250x/s dasselbe - das muss nicht jedes Mal in den Treiber.
         last_sent: tuple | None = None
         last_feedback = 0.0
         try:
