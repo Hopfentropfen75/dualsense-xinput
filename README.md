@@ -215,3 +215,16 @@ Batterieanzeige zusaetzlich `pystray` und `pillow`.
 ## Lizenz
 
 MIT - siehe [LICENSE](LICENSE).
+
+## Entwicklung
+
+```
+python -m pip install -r requirements.txt
+python -m unittest discover -s tests     # laeuft ohne Controller
+```
+
+Die Tests pruefen Umrechnung, Trigger-Bytes, Output-Report-Layout,
+Einstellungen, Gyro, Reichweite und Telemetrie; GitHub fuehrt sie bei
+jedem Push aus. Laufzeitfehler landen in
+`%LOCALAPPDATA%\DualSenseCockpit\logs\dualsense.log`.
+

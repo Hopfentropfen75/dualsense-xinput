@@ -12,6 +12,7 @@ IP 127.0.0.1, Port 5300.
 
 from __future__ import annotations
 
+import logging
 import math
 import socket
 import struct
@@ -19,6 +20,8 @@ import threading
 import time
 
 SLED_LEN = 232
+
+log = logging.getLogger("dualsense.telemetry")
 FRESH_SECONDS = 0.5
 
 
@@ -39,6 +42,7 @@ class Telemetry:
             self.sock = s
         except OSError as e:
             self.error = f"Port {port} belegt ({e.strerror or e})"
+            log.warning("Telemetrie aus: %s", self.error)
             return
         threading.Thread(target=self._loop, daemon=True).start()
 

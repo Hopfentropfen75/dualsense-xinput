@@ -53,9 +53,16 @@ Rennspiele (Forza Horizon) sortiert.
       belegen, Messskript nach `tools/`.
 - [ ] **Schlanker Decode-Pfad** - fuer die Bruecke nur Sticks, Trigger und
       Tasten dekodieren.
-- [ ] **Tests** - Mapping, Deadzones und Output-Report-Layout als Unit-Tests.
+- [x] **Tests** - Mapping, Deadzones und Output-Report-Layout als Unit-Tests.
 
 ## Erledigt
+
+- [x] Thread-Wechsel auf 0,5 ms, damit Cockpit und Co. die Eingabe nicht bremsen
+- [x] Doppelstart-Sperre mit verlaesslichem Fehlercode
+- [x] Logdatei statt stummer Fehler
+- [x] Sperre beim Speichern der Einstellungen
+- [x] Schriften lokal statt von Google
+- [x] requirements.txt und GitHub-Check
 
 - [x] Eingabe-Warteschlange leeren statt Rueckstau (USB 1000 Hz)
 - [x] ViGEm nur bei Aenderung aktualisieren

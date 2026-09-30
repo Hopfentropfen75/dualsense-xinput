@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import ctypes
 import json
+import logging
 import os
 import secrets
 import subprocess
@@ -36,6 +37,12 @@ INFO = STATE_DIR / "ui.json"
 TITLE = "DualSense Cockpit"
 FPS = 30
 GYRO_MODES = {"aus": "Aus", "l2": "Beim Zielen (L2)", "immer": "Immer"}
+FONT_DIR = HERE / "assets"
+# Nur diese Dateien werden ausgeliefert - kein freier Zugriff aufs Dateisystem.
+FONTS = {"ChakraPetch-Medium.ttf", "ChakraPetch-SemiBold.ttf",
+         "ChakraPetch-Bold.ttf", "InstrumentSans.ttf", "JetBrainsMono.ttf"}
+
+log = logging.getLogger("dualsense.webui")
 
 
 class Cockpit:
@@ -133,23 +140,27 @@ class Cockpit:
         elif path == "/api/auto":
             settings.update(auto_game=bool(body["on"]))
         elif path == "/api/profile/new":
-            data = settings.load()
-            name = str(body["name"]).strip()
-            if not name or name in data["profiles"]:
-                return {"error": "Den Namen gibt es schon." if name
-                        else "Bitte einen Namen eingeben."}
-            base = dict(data["profiles"].get(body.get("from"), {}))
-            base["games"] = []
-            data["profiles"][name] = base
-            data["active"] = name
-            settings.save(data)
-        elif path == "/api/profile/delete":
-            data = settings.load()
-            if len(data["profiles"]) > 1:
-                data["profiles"].pop(body["name"], None)
-                if data["active"] not in data["profiles"]:
-                    data["active"] = next(iter(data["profiles"]))
+            with settings.LOCK:
+                data = settings.load()
+                name = str(body["name"]).strip()
+                if not name or name in data["profiles"]:
+                    return {"error": "Den Namen gibt es schon." if name
+                            else "Bitte einen Namen eingeben."}
+                base = dict(data["profiles"].get(body.get("from"), {}))
+                base["games"] = []
+                data["profiles"][name] = base
+                data["active"] = name
                 settings.save(data)
+            log.info("Profil angelegt: %s", name)
+        elif path == "/api/profile/delete":
+            with settings.LOCK:
+                data = settings.load()
+                if len(data["profiles"]) > 1:
+                    data["profiles"].pop(body["name"], None)
+                    if data["active"] not in data["profiles"]:
+                        data["active"] = next(iter(data["profiles"]))
+                    settings.save(data)
+            log.info("Profil geloescht: %s", body["name"])
         elif path == "/api/abs-test":
             if b is not None:
                 b.abs_test_until = time.time() + 1.5
@@ -194,6 +205,11 @@ class Cockpit:
                     self._send(200, PAGE.read_bytes(), "text/html; charset=utf-8")
                 elif u.path == "/favicon.ico" and ICON.exists():
                     self._send(200, ICON.read_bytes(), "image/x-icon")
+                elif (u.path.startswith("/fonts/")
+                      and u.path[7:] in FONTS):
+                    # Schriften lokal - das Cockpit laedt nichts aus dem Netz.
+                    self._send(200, (FONT_DIR / u.path[7:]).read_bytes(),
+                               "font/ttf")
                 elif not self._authorized(q):
                     self._json({"error": "Token fehlt"}, 403)
                 elif u.path == "/api/settings":
@@ -213,6 +229,7 @@ class Cockpit:
                     body = json.loads(self.rfile.read(n) or b"{}")
                     self._json(cockpit._post(u.path, body))
                 except (ValueError, KeyError) as e:
+                    log.warning("Ungueltige Anfrage an %s: %s", u.path, e)
                     self._json({"error": f"Ungueltige Anfrage: {e}"}, 400)
 
             def _stream(self):

@@ -7,12 +7,14 @@ zeigt den Akkustand neben der Uhr und stellt das Cockpit-Fenster bereit
 
 from __future__ import annotations
 
+import logging
 import sys
 import threading
 import time
 
 import pystray
 
+import applog
 import settings
 import webui
 from battery import Status, make_icon, windows_light_taskbar
@@ -20,6 +22,12 @@ from bridge import Bridge
 from mapping import Config
 
 REFRESH_SECONDS = 5.0
+# Python gibt anderen Threads sonst nur alle 5 ms die Kontrolle ab - bei
+# 1000 Reports/s koennte ein Controller-Report so lange auf Cockpit, Tray
+# oder Telemetrie warten. 0,5 ms haelt die Eingabe fluessig.
+SWITCH_INTERVAL = 0.0005
+
+log = logging.getLogger("dualsense.tray")
 
 
 class App:
@@ -100,20 +108,29 @@ class App:
             try:
                 self.bridge = Bridge(self.cfg, quiet=True)
                 self.error = None
+                log.info("Bruecke gestartet (%s)",
+                         "Bluetooth" if self.bridge.ds.bluetooth else "USB")
                 self.bridge.run(stop=self._stop)
             except RuntimeError as e:
-                self.error = str(e).split(".")[0]
+                msg = str(e).split(".")[0]
+                if msg != self.error:          # nicht alle 3 s dasselbe
+                    log.info("Bruecke wartet: %s", msg)
+                self.error = msg
                 self.bridge = None
-            except OSError:
+            except OSError as e:
+                log.warning("Verbindung verloren: %s", e)
                 self.error = "Verbindung verloren"
                 self.bridge = None
+            except Exception:
+                log.exception("Bruecke abgestuerzt - Neustart in 3 s")
+                self.error = "Fehler - siehe Logdatei"
             # Vor dem naechsten Versuch aufraeumen, sonst sammeln sich
             # virtuelle Pads an.
             if self.bridge is not None:
                 try:
                     self.bridge.close()
                 except Exception:
-                    pass
+                    log.exception("Aufraeumen der Bruecke fehlgeschlagen")
                 self.bridge = None
             if self._stop.is_set():
                 break
@@ -155,7 +172,7 @@ class App:
             icon.notify("Laeuft auch mit geschlossenem Fenster weiter - "
                         "Symbol neben der Uhr.", "DualSense")
         except Exception:
-            pass
+            log.debug("Startmeldung nicht moeglich", exc_info=True)
 
 
 def _already_running() -> bool:
@@ -163,18 +180,30 @@ def _already_running() -> bool:
     Spiel saehe dann wieder zwei Controller. Ein benannter Mutex verhindert
     das; der Handle bleibt bis Prozessende offen."""
     import ctypes
+    from ctypes import wintypes
 
-    k32 = ctypes.windll.kernel32
+    # use_last_error: nur so liest ctypes.get_last_error() verlaesslich den
+    # Fehler von CreateMutexW - windll.GetLastError() kann ctypes selbst
+    # schon ueberschrieben haben.
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.CreateMutexW.restype = wintypes.HANDLE
+    k32.CreateMutexW.argtypes = [ctypes.c_void_p, wintypes.BOOL,
+                                 wintypes.LPCWSTR]
     global _mutex
     _mutex = k32.CreateMutexW(None, False, "Local\\dualsense_xinput_tray")
-    return k32.GetLastError() == 183  # ERROR_ALREADY_EXISTS
+    return ctypes.get_last_error() == 183  # ERROR_ALREADY_EXISTS
 
 
 if __name__ == "__main__":
     # Ein Symbol fuer alles: startet die Bruecke und zeigt das Cockpit.
     # Laeuft sie schon, wird nur das Cockpit geoeffnet - nie ein zweiter
     # virtueller Pad. --hidden startet ohne Fenster (z. B. fuer Autostart).
+    applog.setup()
+    sys.setswitchinterval(SWITCH_INTERVAL)
     if _already_running():
+        log.info("Laeuft schon - oeffne nur das Cockpit")
         webui.open_running()
         raise SystemExit(0)
+    log.info("Start")
     App().run(show="--hidden" not in sys.argv)
+    log.info("Beendet")

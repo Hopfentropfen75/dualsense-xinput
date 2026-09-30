@@ -14,9 +14,13 @@ from __future__ import annotations
 import copy
 import json
 import os
+import threading
 from pathlib import Path
 
 PATH = Path(__file__).with_name("settings.json")
+# Lesen-Aendern-Schreiben unter einer Sperre: Cockpit, Tray und Regler
+# speichern aus verschiedenen Threads, sonst ginge eine Aenderung verloren.
+LOCK = threading.RLock()
 TELEMETRY_PORT = 5300
 
 PROFILE_DEFAULTS: dict = {
@@ -99,27 +103,30 @@ def load() -> dict:
 
 def save(data: dict) -> None:
     data = _normalize(data)
-    # Erst in eine Nebendatei, dann umbenennen: die Bruecke liest nie
-    # eine halb geschriebene Datei.
-    tmp = PATH.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False),
-                   encoding="utf-8")
-    os.replace(tmp, PATH)
+    with LOCK:
+        # Erst in eine Nebendatei, dann umbenennen: die Bruecke liest nie
+        # eine halb geschriebene Datei.
+        tmp = PATH.with_suffix(".tmp")
+        tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False),
+                       encoding="utf-8")
+        os.replace(tmp, PATH)
 
 
 def update(**changes) -> dict:
-    data = load()
-    data.update(changes)
-    save(data)
-    return data
+    with LOCK:
+        data = load()
+        data.update(changes)
+        save(data)
+        return data
 
 
 def update_profile(name: str, **changes) -> dict:
-    data = load()
-    if name in data["profiles"]:
-        data["profiles"][name].update(changes)
-        save(data)
-    return data
+    with LOCK:
+        data = load()
+        if name in data["profiles"]:
+            data["profiles"][name].update(changes)
+            save(data)
+        return data
 
 
 def effective(data: dict, game_profile: str | None) -> str:

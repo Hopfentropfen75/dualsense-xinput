@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import gc
 import json
+import logging
 import sys
 import threading
 import time
@@ -24,6 +25,8 @@ from gyro import GyroAim
 from mapping import Config, calibrate, map_state
 from output import OutputChannel
 from telemetry import Telemetry
+
+log = logging.getLogger("dualsense.bridge")
 
 # Farbe der Lightbar, solange die Bruecke laeuft.
 ACTIVE_COLOR = (0, 60, 255)
@@ -189,7 +192,9 @@ class Bridge:
                 if wanted != self._wanted:
                     self._wanted = wanted
             except Exception:
-                pass
+                # Weiterlaufen - aber nicht stumm: sonst haengt ein Profil
+                # fest und niemand weiss warum.
+                log.exception("Profil/Spiel konnte nicht gelesen werden")
             self._closing.wait(1.5)
 
     def _check_settings(self) -> None:
@@ -206,6 +211,9 @@ class Bridge:
         self.rumble_gain = float(p["rumble_gain"])
         self.trig = triggers.build(p)
         self.prof = p
+        if name != self.profile_name:
+            log.info("Profil: %s%s", name,
+                     f" (erkannt: {self.game})" if self.game else "")
         self.profile_name = name
         self._triggers_sent = None
         self._rumble_dirty = True       # Rumble mit neuer Staerke nachziehen
@@ -322,7 +330,7 @@ class Bridge:
             self.pad.reset()
             self.pad.update()
         except Exception:
-            pass
+            log.debug("Pad-Reset beim Beenden fehlgeschlagen", exc_info=True)
         # vgamepad entfernt den virtuellen Pad erst im Destruktor. Der
         # Rumble-Callback haelt aber eine Referenz auf die Bruecke und die
         # Bruecke eine auf den Pad - ein Zyklus, den das Refcounting nicht
@@ -334,7 +342,8 @@ class Bridge:
             del pad
             gc.collect()
         except Exception:
-            pass
+            log.warning("Virtueller Pad liess sich nicht entfernen",
+                        exc_info=True)
         if self.out:
             try:
                 # Widerstand zuruecknehmen - sonst bleibt er auch ohne
@@ -357,6 +366,7 @@ def main() -> int:
     ap.add_argument("--quiet", action="store_true")
     a = ap.parse_args()
 
+    sys.setswitchinterval(0.0005)     # siehe tray.SWITCH_INTERVAL
     cfg, pinned = Config(), set()
     if a.deadzone is not None:
         cfg.left_deadzone = cfg.right_deadzone = a.deadzone
