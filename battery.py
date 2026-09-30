@@ -71,7 +71,15 @@ def fill_color(st: Status) -> tuple[int, int, int]:
 
 
 def make_icon(st: Status, size: int = 64, light: bool = False) -> Image.Image:
-    """Zeichnet ein Akkusymbol; bei Ladung zusaetzlich einen Blitz."""
+    """Tray-Symbol: das DS-Monogramm, der Unterstrich zeigt den Akku."""
+    import logo
+
+    return logo.tray_icon(st.percent, st.online, st.charging, st.full,
+                          light=light, size=size)
+
+
+def _battery_icon(st: Status, size: int = 64, light: bool = False) -> Image.Image:
+    """Frueheres Akkusymbol, bleibt als Rueckfall."""
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
     outline = (30, 30, 30, 255) if light else (240, 240, 240, 255)

@@ -39,6 +39,15 @@ aus der Bruecke; die API verlangt ein Zufallstoken, das nur im Link des
 Fensters steht. Wird das Fenster geschlossen, laeuft die Bruecke weiter -
 wieder oeffnen per Desktop-Symbol oder Doppelklick aufs Tray-Symbol.
 
+### Logo
+
+Das DS-Monogramm mit leuchtendem Unterstrich steht auf Desktop-Symbol,
+Fenster und Tray. Im Tray ist der Unterstrich die Akkuanzeige: Laenge =
+Ladestand, blau = verbunden, gruen = laedt, rot = unter 20 %,
+durchgestrichen = nicht verbunden. `python logo.py` erzeugt
+`dualsense.ico` neu. Schrift: Chakra Petch (SIL Open Font License,
+`assets/OFL-ChakraPetch.txt`).
+
 ## Profile und Einstellungen
 
 Alles, was sich pro Spiel unterscheiden soll, steckt in einem Profil:
