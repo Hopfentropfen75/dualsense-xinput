@@ -20,3 +20,19 @@ jobs:
       # installieren wollen.
       - run: python -m pip install hidapi Pillow
       - run: python -m unittest discover -s tests -v
+
+  build:
+    # Baut DualSense.exe und stellt sie als Download am Lauf bereit.
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+      - run: python -m pip install -r requirements.txt pyinstaller
+      - run: python build.py
+      - uses: actions/upload-artifact@v7
+        with:
+          name: DualSense-windows
+          path: dist/DualSense

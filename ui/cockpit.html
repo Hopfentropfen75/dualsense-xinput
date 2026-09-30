@@ -164,6 +164,22 @@
   .inline input[type="text"] { width: auto; flex: 1; min-width: 160px; }
   .msg { font-size: 12.5px; color: var(--slip); }
 
+  /* System */
+  .checks { display: grid; gap: 8px; }
+  .ok-row { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+  .ok-row .dot { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font: 700 11px/1 var(--mono); flex: none; }
+  .ok-row .dot.yes { background: rgba(76, 195, 138, .15); color: var(--grip); }
+  .ok-row .dot.no { background: rgba(255, 90, 78, .15); color: var(--slip); }
+  .path { font: 11.5px var(--mono); color: var(--mute); word-break: break-all; }
+  .lat { display: grid; gap: 8px; }
+  .lat-row { display: grid; grid-template-columns: 150px 1fr 70px; gap: 12px; align-items: center; font-size: 13px; }
+  .lat-row .track { height: 8px; background: var(--ground); border-radius: 4px; overflow: hidden; }
+  .lat-row .track i { display: block; width: 0; height: 100%; background: var(--light); border-radius: 4px; }
+  .lat-row output { font: 600 12px var(--mono); text-align: right; font-variant-numeric: tabular-nums; }
+  .lat-row.total { border-top: 1px solid var(--line); padding-top: 8px; font-weight: 600; }
+  .lat-row.total .track i { background: var(--grip); }
+  a { color: var(--light); }
+
   .overlay { position: fixed; inset: 0; background: rgba(14, 17, 22, .86); display: grid; place-items: center; z-index: 50; }
   .overlay div { text-align: center; display: grid; gap: 8px; max-width: 420px; padding: 24px; }
   .overlay h2 { margin: 0; font: 600 20px var(--display); }
@@ -200,6 +216,7 @@
       <button class="tab" role="tab" aria-selected="false" data-view="sticks" id="tab-sticks"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg>Sticks</button>
       <button class="tab" role="tab" aria-selected="false" data-view="gyro" id="tab-gyro"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>Gyro</button>
       <button class="tab" role="tab" aria-selected="false" data-view="profile" id="tab-profile"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>Profile</button>
+      <button class="tab" role="tab" aria-selected="false" data-view="system" id="tab-system"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>System</button>
     </nav>
 
     <!-- LIVE -->
@@ -354,6 +371,49 @@
         </section>
       </div>
     </div>
+
+    <!-- SYSTEM -->
+    <div class="view" id="view-system" role="tabpanel" aria-labelledby="tab-system" hidden>
+      <div class="grid-2">
+        <section class="panel">
+          <div class="panel-head"><h2>Latenz</h2><span class="hint">vom Controller bis ins Spiel</span></div>
+          <p class="hint" style="margin:0">Misst 4 Sekunden lang. Währenddessen die Sticks bewegen – XInput meldet nur Änderungen.</p>
+          <div class="lat" id="latRows">
+            <div class="lat-row"><span id="latLinkLabel">USB-Takt (Ø Wartezeit)</span><span class="track"><i id="latUsbBar"></i></span><output id="latUsb">–</output></div>
+            <div class="lat-row"><span>Brücke</span><span class="track"><i id="latProcBar"></i></span><output id="latProc">–</output></div>
+            <div class="lat-row"><span>ViGEm → Spiel</span><span class="track"><i id="latVigemBar"></i></span><output id="latVigem">–</output></div>
+            <div class="lat-row total"><span>Gesamt</span><span class="track"><i id="latTotalBar"></i></span><output id="latTotal">–</output></div>
+          </div>
+          <div class="hint" id="latNote"></div>
+          <button class="btn" id="latBtn" type="button">Latenz messen</button>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head"><h2>Spiele-Schutz</h2><span class="hint">HidHide</span></div>
+          <p class="hint" style="margin:0">Versteckt den echten DualSense vor Spielen, damit sie nur den Xbox-Pad sehen – sonst gibt es doppelte Eingaben. Die Brücke selbst muss freigegeben sein.</p>
+          <div class="checks" id="hhChecks"></div>
+          <div class="path" id="hhApp"></div>
+          <div class="inline">
+            <button class="btn" id="hhSetup" type="button">Einrichten</button>
+            <button class="btn" id="hhCloak" type="button">Schutz ausschalten</button>
+          </div>
+          <div class="msg" id="hhMsg" hidden></div>
+        </section>
+      </div>
+      <div class="grid-2">
+        <section class="panel">
+          <div class="panel-head"><h2>Start</h2></div>
+          <label class="check"><input type="checkbox" id="autostart"> Mit Windows starten (ohne Fenster, Symbol im Tray)</label>
+          <p class="hint" style="margin:0">Das Cockpit öffnest du dann per Doppelklick auf das Tray-Symbol oder über das Desktop-Symbol.</p>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><h2>Dateien</h2></div>
+          <div class="hint">Logdatei</div><div class="path" id="logPath">–</div>
+          <div class="hint">Einstellungen</div><div class="path" id="settingsPath">–</div>
+          <button class="btn" id="openLog" type="button">Logordner öffnen</button>
+        </section>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -377,10 +437,22 @@
   }
 
   /* ---------- API ---------- */
-  async function api(path, body) {
-    const r = await fetch(path, { method: body ? "POST" : "GET", headers: { "X-Token": TOKEN, "Content-Type": "application/json" },
-                                  body: body ? JSON.stringify(body) : undefined });
-    return r.json();
+  // Mit Zeitlimit und einem zweiten Versuch: auf manchen Systemen reisst
+  // Windows lokale Verbindungen kurz ab (z. B. wenn die Bruecke HidHide
+  // abfragt) - ohne Zeitlimit wuerde die Anfrage dann ewig warten.
+  async function api(path, body, tries = 2) {
+    for (let i = 0; i < tries; i++) {
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), 4000);
+      try {
+        const r = await fetch(path, { method: body ? "POST" : "GET", signal: ctl.signal,
+                                      headers: { "X-Token": TOKEN, "Content-Type": "application/json" },
+                                      body: body ? JSON.stringify(body) : undefined });
+        return await r.json();
+      } catch (e) {
+        if (i === tries - 1) throw e;
+      } finally { clearTimeout(timer); }
+    }
   }
 
   let S = null;          // Einstellungen, Modi
@@ -790,6 +862,7 @@
     }
     $("gyroState").textContent = g.active ? "aktiv – Drehung steuert den rechten Stick" : P().gyro === "l2" ? "wartet auf L2 (Zielen)" : P().gyro === "aus" ? "aus" : "Drehung → rechter Stick";
 
+    renderLatency(s.latency, s.link);
     if (measuring && s.raw) sampleReach(s.raw);
     if (measuring) drawReach();
 
@@ -800,10 +873,12 @@
   }
 
   /* ---------- Verbindung ---------- */
-  let es = null, offlineTimer = null;
+  let es = null, offlineTimer = null, lastMsg = 0;
   function connect() {
+    if (es) es.close();
     es = new EventSource(`/api/stream?t=${encodeURIComponent(TOKEN)}`);
     es.onmessage = (e) => {
+      lastMsg = performance.now();
       clearTimeout(offlineTimer); offlineTimer = null; $("offline").hidden = true;
       render(JSON.parse(e.data));
     };
@@ -811,6 +886,10 @@
       if (!offlineTimer) offlineTimer = setTimeout(() => { $("offline").hidden = false; live = { bridge: false }; updateHeader(); $("lightbar").className = "lightbar off"; }, 2500);
     };
   }
+
+  // Waechter: der Stream liefert 30 Bilder/s - kommt 3 s nichts, obwohl die
+  // Verbindung offen scheint, neu verbinden.
+  setInterval(() => { if (es && lastMsg && performance.now() - lastMsg > 3000) { lastMsg = performance.now(); connect(); } }, 1000);
 
   async function start() {
     buildSeg($("modeSeg"), { aus: "Aus", racing: "Racing", racing_live: "Racing + Feedback", shooter: "Shooter" });
@@ -820,9 +899,89 @@
       buildSeg($("modeSeg"), S.modes); buildSeg($("gyroSeg"), S.gyro_modes);
       target = S.settings.active;
     } catch (e) { $("offline").hidden = false; }
-    try { const tab = localStorage.getItem("tab"); if (tab && $("tab-" + tab)) $("tab-" + tab).click(); } catch (e) {}
+    // Tab aus dem Link (#system) oder der letzte gemerkte.
+    let tab = location.hash.slice(1);
+    try { if (!tab) tab = localStorage.getItem("tab"); } catch (e) {}
+    if (tab && $("tab-" + tab)) $("tab-" + tab).click();
     fillControls(); drawStatic(); updateHeader();
     connect();
+  }
+
+  /* ---------- System ---------- */
+  let SYS = null;
+  function renderSystem() {
+    if (!SYS) return;
+    $("autostart").checked = SYS.autostart;
+    $("logPath").textContent = SYS.log; $("settingsPath").textContent = SYS.settings_file;
+    const h = SYS.hidhide || {};
+    const checks = $("hhChecks"); checks.innerHTML = "";
+    $("hhMsg").hidden = !h.error; $("hhMsg").textContent = h.error || "";
+    if (h.loading || h.busy) {
+      checks.innerHTML = '<div class="hint">HidHide wird abgefragt …</div>';
+      $("hhSetup").disabled = true; $("hhCloak").hidden = true;
+      setTimeout(loadSystem, 700);
+      return;
+    }
+    const row = (ok, text) => {
+      const d = document.createElement("div"); d.className = "ok-row";
+      d.innerHTML = `<span class="dot ${ok ? "yes" : "no"}">${ok ? "✓" : "✕"}</span><span></span>`;
+      d.children[1].textContent = text; checks.appendChild(d);
+    };
+    if (!h.installed) {
+      row(false, "HidHide ist nicht installiert");
+      const a = document.createElement("div"); a.className = "hint";
+      a.innerHTML = 'Download: <a href="https://github.com/nefarius/HidHide/releases" target="_blank" rel="noopener">github.com/nefarius/HidHide</a> – danach hier „Einrichten“.';
+      checks.appendChild(a);
+      $("hhSetup").disabled = true; $("hhCloak").hidden = true; $("hhApp").textContent = "";
+      return;
+    }
+    row(true, "HidHide installiert");
+    row(h.cloak, h.cloak ? "Schutz ist an" : "Schutz ist aus");
+    row(h.dualsense_hidden, h.dualsense_hidden ? "DualSense ist vor Spielen versteckt" : "DualSense ist nicht versteckt");
+    row(h.app_registered, h.app_registered ? "Brücke ist freigegeben" : "Brücke ist nicht freigegeben – sie fände den Controller nicht");
+    $("hhApp").textContent = h.app;
+    const allOk = h.cloak && h.dualsense_hidden && h.app_registered;
+    $("hhSetup").disabled = false; $("hhSetup").textContent = allOk ? "Neu einrichten" : "Einrichten";
+    $("hhCloak").hidden = false; $("hhCloak").textContent = h.cloak ? "Schutz ausschalten" : "Schutz einschalten";
+  }
+  async function loadSystem(refresh = false) {
+    try { SYS = await api(refresh === true ? "/api/system?refresh=1" : "/api/system"); renderSystem(); }
+    catch (e) { $("hhMsg").hidden = false; $("hhMsg").textContent = `Systemstatus nicht ladbar: ${e.message || e}`; }
+  }
+  function hhResult(r) {
+    $("hhMsg").hidden = !r.error; $("hhMsg").textContent = r.error || "";
+    if (!r.error) { SYS = r; renderSystem(); }
+  }
+  // Solange der System-Tab offen ist: Autostart & Co. frisch halten. HidHide
+  // selbst fragt die Bruecke nur beim Oeffnen und nach Aktionen ab.
+  setInterval(() => { if (!$("view-system").hidden) loadSystem(); }, 5000);
+  $("hhSetup").addEventListener("click", async () => { $("hhSetup").disabled = true; hhResult(await api("/api/hidhide/setup", {})); $("hhSetup").disabled = false; });
+  $("hhCloak").addEventListener("click", async () => hhResult(await api("/api/hidhide/cloak", { on: !(SYS.hidhide || {}).cloak })));
+  $("autostart").addEventListener("change", async () => { SYS = await api("/api/autostart", { on: $("autostart").checked }); renderSystem(); });
+  $("openLog").addEventListener("click", () => api("/api/open-log", {}));
+  $("tab-system").addEventListener("click", () => loadSystem(true));
+
+  $("latBtn").addEventListener("click", async () => {
+    const r = await api("/api/latency", {});
+    if (r.error) $("latNote").textContent = r.error;
+  });
+  function renderLatency(L, link) {
+    const btn = $("latBtn");
+    if (!L) return;
+    if (L.state === "running") {
+      btn.disabled = true; btn.textContent = `Misst … noch ${num(L.left)} s – Sticks bewegen`;
+      return;
+    }
+    btn.disabled = false; btn.textContent = "Nochmal messen";
+    if (L.state === "error") { $("latNote").textContent = L.message; return; }
+    $("latLinkLabel").textContent = `${link === "Bluetooth" ? "Bluetooth" : "USB"}-Takt (Ø Wartezeit)`;
+    const scale = Math.max(4, L.total_ms);
+    [["Usb", L.usb_ms], ["Proc", L.proc_ms], ["Vigem", L.vigem_ms], ["Total", L.total_ms]].forEach(([k, v]) => {
+      $("lat" + k).textContent = `${num(v, 2)} ms`;
+      $("lat" + k + "Bar").style.width = `${Math.min(100, v / scale * 100)}%`;
+    });
+    $("latNote").textContent = `${L.samples} Messpunkte · ViGEm → Spiel 95 %-Wert ${num(L.vigem_p95_ms, 2)} ms · Rückstau ${num(L.backlog, 2)} Reports pro Lesevorgang` +
+      (L.backlog > 0.2 ? " – die Brücke kommt nicht ganz hinterher." : " – kein Rückstau.");
   }
 
   $("absTest").addEventListener("click", () => api("/api/abs-test", {}));

@@ -52,12 +52,14 @@ durchgestrichen = nicht verbunden. `python logo.py` erzeugt
 
 Alles, was sich pro Spiel unterscheiden soll, steckt in einem Profil:
 Trigger-Widerstand, Stick-Deadzones, Trigger-Kurve und Rumble-Staerke.
-Mitgeliefert sind **Standard**, **Forza** und **Shooter**; im
+Mitgeliefert sind die generischen Profile **Standard**, **Racing** und
+**Shooter**; im
 Cockpit lassen sich Profile anlegen, loeschen und per Regler
 einstellen. Aenderungen wirken nach ein bis zwei Sekunden, ohne Neustart.
 
 **Automatisch pro Spiel:** Jedes Profil hat eine Liste von Teilen des
-Exe-Namens (Forza: `forzahorizon, forzamotorsport`). Laeuft ein passendes
+Exe-Namens (Racing: `forzahorizon, forzamotorsport` - weitere Rennspiele
+einfach ergaenzen). Laeuft ein passendes
 Programm, schaltet die Bruecke von selbst um. Abschaltbar im Fenster und
 im Tray-Menue unter "Profil".
 
@@ -215,6 +217,32 @@ Batterieanzeige zusaetzlich `pystray` und `pillow`.
 ## Lizenz
 
 MIT - siehe [LICENSE](LICENSE).
+
+## System
+
+Im Cockpit-Tab **System**:
+
+- **Latenz messen** - 4 Sekunden, dabei die Sticks bewegen. Zeigt die
+  Wartezeit auf den USB/Bluetooth-Takt (aus der Reportrate berechnet), die
+  Verarbeitung in der Bruecke und die Zeit von ViGEm bis XInput (beide
+  gemessen), dazu den Rueckstau.
+- **Spiele-Schutz (HidHide)** - versteckt den echten DualSense vor Spielen,
+  damit sie nur den Xbox-Pad sehen. "Einrichten" gibt die Bruecke frei,
+  versteckt verbundene DualSense und schaltet den Schutz an.
+- **Mit Windows starten** - auch im Tray-Menue.
+
+## Als .exe
+
+```
+python -m pip install pyinstaller
+python build.py --install
+```
+
+Baut `DualSense.exe` (laeuft ohne Python), kopiert sie nach
+`%LOCALAPPDATA%\Programs\DualSense` und gibt sie in HidHide frei.
+Einstellungen und Logs liegen fuer Quellcode und .exe gemeinsam unter
+`%LOCALAPPDATA%\DualSenseCockpit`. Auf einem anderen Rechner braucht es nur
+den ViGEmBus-Treiber (und fuer den Spiele-Schutz HidHide).
 
 ## Entwicklung
 

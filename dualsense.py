@@ -176,7 +176,9 @@ class DualSense:
         self.bluetooth = False
         self.state = State()
         # Gelesene Reports insgesamt - daraus ergibt sich die Reportrate.
+        # reads zaehlt die Lesevorgaenge; reports/reads > 1 = Rueckstau.
         self.reports = 0
+        self.reads = 0
 
     def enable_full_bt(self) -> None:
         """Ueber BT liefert der Controller erst nach diesem Feature-Report
@@ -219,6 +221,7 @@ class DualSense:
         if not data:
             return None
         self.reports += 1
+        self.reads += 1
         # Begrenzt, damit ein Dauerstrom die Schleife nicht festhaelt.
         for _ in range(256):
             newer = self.dev.read(78)

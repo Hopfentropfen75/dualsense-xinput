@@ -14,10 +14,17 @@ from __future__ import annotations
 import copy
 import json
 import os
+import shutil
 import threading
 from pathlib import Path
 
-PATH = Path(__file__).with_name("settings.json")
+# Beim Benutzer statt neben dem Code: so teilen sich Quellcode-Start und
+# gebaute .exe dieselben Profile, und die .exe darf in "Programme" liegen.
+STATE_DIR = Path(os.environ.get("LOCALAPPDATA", str(Path(__file__).parent))) \
+    / "DualSenseCockpit"
+PATH = STATE_DIR / "settings.json"
+DEFAULT_PATH = PATH
+LEGACY_PATH = Path(__file__).with_name("settings.json")
 # Lesen-Aendern-Schreiben unter einer Sperre: Cockpit, Tray und Regler
 # speichern aus verschiedenen Threads, sonst ginge eine Aenderung verloren.
 LOCK = threading.RLock()
@@ -47,9 +54,11 @@ PROFILE_DEFAULTS: dict = {
     "games": [],                # Teile von Exe-Namen, z. B. "forzahorizon"
 }
 
+# Generische Profile - welches Spiel sie automatisch aktiviert, steht in
+# "games" und laesst sich im Cockpit erweitern.
 DEFAULT_PROFILES: dict[str, dict] = {
     "Standard": {},
-    "Forza": {
+    "Racing": {
         "triggers": "racing_live",
         "stick_deadzone": 0.06,
         "r2_deadzone": 0.03,
@@ -71,7 +80,20 @@ def _migrate_profile(p: dict) -> dict:
     return p
 
 
+SCHEMA = 2
+
+
 def _normalize(data: dict) -> dict:
+    data = dict(data)
+    if int(data.get("version", 1)) < 2 and isinstance(data.get("profiles"), dict):
+        # Version 1 hatte ein Profil "Forza" - jetzt heisst es generisch
+        # "Racing". Einmalig umbenennen, eigene Werte bleiben erhalten.
+        profiles = data["profiles"]
+        if "Forza" in profiles and "Racing" not in profiles:
+            data["profiles"] = {("Racing" if k == "Forza" else k): v
+                                for k, v in profiles.items()}
+            if data.get("active") == "Forza":
+                data["active"] = "Racing"
     profiles = data.get("profiles")
     if not isinstance(profiles, dict) or not profiles:
         profiles = copy.deepcopy(DEFAULT_PROFILES)
@@ -82,10 +104,11 @@ def _normalize(data: dict) -> dict:
     if active not in profiles:
         # Altformat hatte nur ein Trigger-Profil.
         old = str(data.get("trigger_profile", ""))
-        guess = {"racing": "Forza", "racing_live": "Forza",
+        guess = {"racing": "Racing", "racing_live": "Racing",
                  "shooter": "Shooter"}.get(old, "Standard")
         active = guess if guess in profiles else next(iter(profiles))
     return {
+        "version": SCHEMA,
         "active": active,
         "auto_game": bool(data.get("auto_game", True)),
         "telemetry_port": int(data.get("telemetry_port", TELEMETRY_PORT)),
@@ -93,7 +116,18 @@ def _normalize(data: dict) -> dict:
     }
 
 
+def _migrate_location() -> None:
+    """Frueher lag settings.json neben dem Code - einmal umziehen."""
+    if PATH == DEFAULT_PATH and not PATH.exists() and LEGACY_PATH.exists():
+        try:
+            PATH.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(LEGACY_PATH, PATH)
+        except OSError:
+            pass
+
+
 def load() -> dict:
+    _migrate_location()
     try:
         data = json.loads(PATH.read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -104,6 +138,7 @@ def load() -> dict:
 def save(data: dict) -> None:
     data = _normalize(data)
     with LOCK:
+        PATH.parent.mkdir(parents=True, exist_ok=True)
         # Erst in eine Nebendatei, dann umbenennen: die Bruecke liest nie
         # eine halb geschriebene Datei.
         tmp = PATH.with_suffix(".tmp")

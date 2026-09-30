@@ -166,26 +166,38 @@ class Settings(unittest.TestCase):
 
     def test_defaults(self):
         d = settings.load()
-        self.assertEqual(set(d["profiles"]), {"Standard", "Forza", "Shooter"})
+        self.assertEqual(set(d["profiles"]), {"Standard", "Racing", "Shooter"})
 
     def test_migrates_old_formats(self):
         settings.PATH.write_text(json.dumps({"trigger_profile": "racing"}))
-        self.assertEqual(settings.load()["active"], "Forza")
+        self.assertEqual(settings.load()["active"], "Racing")
         settings.PATH.write_text(json.dumps({"active": "A", "profiles": {
             "A": {"trigger_deadzone": 0.05, "trigger_curve": 2.0}}}))
         a = settings.load()["profiles"]["A"]
         self.assertEqual((a["l2_deadzone"], a["r2_curve"]), (0.05, 2.0))
         self.assertNotIn("trigger_deadzone", a)
 
+    def test_forza_becomes_racing_once(self):
+        settings.PATH.write_text(json.dumps({"active": "Forza", "profiles": {
+            "Standard": {}, "Forza": {"brake_force": 7}}}))
+        d = settings.load()
+        self.assertEqual(d["active"], "Racing")
+        self.assertEqual(d["profiles"]["Racing"]["brake_force"], 7)
+        self.assertNotIn("Forza", d["profiles"])
+        # Danach darf man wieder selbst ein Profil "Forza" haben.
+        d["profiles"]["Forza"] = {}
+        settings.save(d)
+        self.assertIn("Forza", settings.load()["profiles"])
+
     def test_update_profile_roundtrip(self):
-        settings.update_profile("Forza", brake_force=8)
-        self.assertEqual(settings.load()["profiles"]["Forza"]["brake_force"], 8)
+        settings.update_profile("Racing", brake_force=8)
+        self.assertEqual(settings.load()["profiles"]["Racing"]["brake_force"], 8)
 
     def test_effective_prefers_running_game(self):
         d = settings.load()
-        self.assertEqual(settings.effective(d, "Forza"), "Forza")
+        self.assertEqual(settings.effective(d, "Racing"), "Racing")
         d["auto_game"] = False
-        self.assertEqual(settings.effective(d, "Forza"), d["active"])
+        self.assertEqual(settings.effective(d, "Racing"), d["active"])
 
 
 class Gyro(unittest.TestCase):
@@ -222,6 +234,16 @@ class Reach(unittest.TestCase):
         r = rangecheck.Reach()
         r.add(1, 0)
         self.assertIsNone(rangecheck.recommend(r, r))
+
+
+class HidHidePaths(unittest.TestCase):
+    def test_instance_from_hidapi_path(self):
+        import hidhide
+        path = (rb"\\?\HID#VID_054C&PID_0CE6&MI_03#8&17336b02&0&0000"
+                rb"#{4d1e55b2-f16f-11cf-88cb-001111000030}")
+        self.assertEqual(hidhide.instance_from_hidpath(path),
+                         r"HID\VID_054C&PID_0CE6&MI_03\8&17336B02&0&0000")
+        self.assertIsNone(hidhide.instance_from_hidpath("kaputt"))
 
 
 class TelemetryUdp(unittest.TestCase):

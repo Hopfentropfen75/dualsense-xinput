@@ -15,6 +15,7 @@ import time
 import pystray
 
 import applog
+import autostart
 import settings
 import webui
 from battery import Status, make_icon, windows_light_taskbar
@@ -53,6 +54,10 @@ class App:
                                  default=True),
                 pystray.MenuItem("Profil", pystray.Menu(self._profile_items)),
                 pystray.MenuItem("Neu kalibrieren", self._recalibrate),
+                pystray.MenuItem(
+                    "Mit Windows starten",
+                    lambda *_: autostart.set_enabled(not autostart.enabled()),
+                    checked=lambda _: autostart.enabled()),
                 pystray.MenuItem("Beenden", self._quit),
             ),
         )

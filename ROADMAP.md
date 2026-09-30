@@ -32,8 +32,8 @@ Rennspiele (Forza Horizon) sortiert.
 
 - [x] **Profil pro Spiel** - laufenden Prozess erkennen (z. B.
       `ForzaHorizon6.exe`) und automatisch auf "Racing" schalten.
-- [ ] **Autostart mit Windows** - Schalter im Tray-Menue.
-- [ ] **Physischen DualSense verstecken (HidHide)** - Spiele mit eigener
+- [x] **Autostart mit Windows** - Schalter im Tray-Menue.
+- [x] **Physischen DualSense verstecken (HidHide)** - Spiele mit eigener
       DualSense-Unterstuetzung sehen sonst zwei Controller.
 - [x] **Gyro-Zielen** - Bewegungssensor auf den rechten Stick, nur solange
       eine Taste gehalten wird.
@@ -49,7 +49,7 @@ Rennspiele (Forza Horizon) sortiert.
 
 ## Technik
 
-- [ ] **Latenz messen** - Vorher/Nachher der Warteschlangen-Leerung per USB
+- [x] **Latenz messen** - Vorher/Nachher der Warteschlangen-Leerung per USB
       belegen, Messskript nach `tools/`.
 - [ ] **Schlanker Decode-Pfad** - fuer die Bruecke nur Sticks, Trigger und
       Tasten dekodieren.
@@ -63,6 +63,8 @@ Rennspiele (Forza Horizon) sortiert.
 - [x] Sperre beim Speichern der Einstellungen
 - [x] Schriften lokal statt von Google
 - [x] requirements.txt und GitHub-Check
+- [x] Eigenstaendige DualSense.exe (PyInstaller) mit Installation
+- [x] Generische Profile Standard, Racing, Shooter
 
 - [x] Eingabe-Warteschlange leeren statt Rueckstau (USB 1000 Hz)
 - [x] ViGEm nur bei Aenderung aktualisieren

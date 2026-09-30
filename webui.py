@@ -24,6 +24,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+import applog
+import autostart
+import hidhide
+import latency
 import settings
 import triggers
 from dualsense import find, is_usb
@@ -50,6 +54,17 @@ class Cockpit:
         self.app = app
         self.token = secrets.token_urlsafe(18)
         self._ctl = (0.0, None)
+        # HidHide laeuft ueber einen Unterprozess. Den startet nur dieser
+        # Hintergrund-Thread - nie ein Server-Thread: waehrend der Unterprozess
+        # lief, brach Windows im Test die offene Browser-Verbindung ab
+        # (WinError 10053), und die Seite wartete ewig.
+        self._hh_status: dict = {"loading": True}
+        self._hh_jobs: list = []
+        self._hh_wake = threading.Event()
+        self._hh_refresh = True
+        self._hh_error: str | None = None
+        threading.Thread(target=self._hh_loop, daemon=True,
+                         name="hidhide").start()
         self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), self._handler())
         self.httpd.daemon_threads = True
         self.port = self.httpd.server_address[1]
@@ -117,6 +132,7 @@ class Cockpit:
                   "y": b.gyro.rate[1]},
             abs=b.feedback[0],
             spin=b.feedback[1],
+            latency=b.latency.result if b.latency else None,
             tele={"fresh": bool(t and t.fresh), "seen": bool(t and t.seen),
                   "error": t.error if t else None,
                   "speed": t.speed if t else 0.0,
@@ -126,6 +142,55 @@ class Cockpit:
         return s
 
     # --- Einstellungen --------------------------------------------------
+
+    def _hh_loop(self) -> None:
+        """Fuehrt HidHide-Aktionen aus und haelt den Status aktuell, solange
+        jemand das Cockpit offen hat."""
+        last = 0.0
+        while True:
+            self._hh_wake.wait(5.0)
+            self._hh_wake.clear()
+            while self._hh_jobs:
+                job = self._hh_jobs.pop(0)
+                try:
+                    r = job() or {}
+                    self._hh_error = r.get("error")
+                except Exception:
+                    log.exception("HidHide-Aktion fehlgeschlagen")
+                    self._hh_error = "HidHide-Aktion fehlgeschlagen - siehe Logdatei."
+                last = 0.0                      # danach sofort neu lesen
+                self._hh_refresh = True
+            # Nur auf Nachfrage und hoechstens alle 30 s: jeder Aufruf startet
+            # einen Unterprozess, und der stoert auf manchen Systemen kurz
+            # die Verbindungen zum Cockpit.
+            if self._hh_refresh and time.time() - last > 30:
+                self._hh_refresh = False
+                try:
+                    self._hh_status = hidhide.status()
+                except Exception:
+                    log.exception("HidHide-Status nicht lesbar")
+                    self._hh_status = {"installed": False,
+                                       "error": "Status nicht lesbar"}
+                last = time.time()
+
+    def _hh_run(self, job) -> None:
+        self._hh_error = None
+        self._hh_status = {**self._hh_status, "busy": True}
+        self._hh_jobs.append(job)
+        self._hh_wake.set()
+
+    def _system(self, refresh: bool = False) -> dict:
+        if refresh or self._hh_status.get("loading"):
+            self._hh_refresh = True
+            self._hh_wake.set()
+        return {
+            "autostart": autostart.enabled(),
+            "hidhide": {**self._hh_status,
+                        **({"error": self._hh_error} if self._hh_error else {})},
+            "log": str(applog.LOG_FILE),
+            "settings_file": str(settings.PATH),
+            "exe": hidhide.current_exe(),
+        }
 
     def _settings(self) -> dict:
         return {"settings": settings.load(), "modes": triggers.MODES,
@@ -167,6 +232,25 @@ class Cockpit:
         elif path == "/api/recalibrate":
             if b is not None:
                 b.recalibrate_requested = True
+        elif path == "/api/latency":
+            if b is None or b.last_x is None:
+                return {"error": "Kein Controller verbunden."}
+            b.latency = latency.Probe(b)
+        elif path == "/api/autostart":
+            autostart.set_enabled(bool(body["on"]))
+            log.info("Autostart %s", "an" if body["on"] else "aus")
+            return self._system()
+        elif path == "/api/hidhide/setup":
+            self._hh_run(hidhide.setup)
+            return self._system()
+        elif path == "/api/hidhide/cloak":
+            on = bool(body["on"])
+            self._hh_run(lambda: hidhide.set_cloak(on))
+            return self._system()
+        elif path == "/api/open-log":
+            applog.LOG_DIR.mkdir(parents=True, exist_ok=True)
+            os.startfile(applog.LOG_DIR)
+            return self._system()
         else:
             return {"error": "unbekannt"}
         return self._settings()
@@ -214,6 +298,9 @@ class Cockpit:
                     self._json({"error": "Token fehlt"}, 403)
                 elif u.path == "/api/settings":
                     self._json(cockpit._settings())
+                elif u.path == "/api/system":
+                    # ?refresh=1 beim Oeffnen des Tabs: HidHide neu lesen.
+                    self._json(cockpit._system("refresh" in q))
                 elif u.path == "/api/stream":
                     self._stream()
                 else:

@@ -83,6 +83,8 @@ class Bridge:
         self.report_rate = 0.0
         self.proc_ms = 0.0                 # Report gelesen -> Pad aktualisiert
         self.abs_test_until = 0.0
+        self.last_update_t = 0.0           # perf_counter vor pad.update()
+        self.latency = None                # latency.Probe, wenn gemessen wird
         self._wanted: tuple[str, str] | None = None
         self._applied: tuple[str, str] | None = None
         self._triggers_sent: tuple[bytes, bytes] | None = None
@@ -286,6 +288,7 @@ class Bridge:
                         r.bRightTrigger = x.rt
                         r.sThumbLX, r.sThumbLY = x.lx, x.ly
                         r.sThumbRX, r.sThumbRY = x.rx, x.ry
+                        self.last_update_t = time.perf_counter()
                         self.pad.update()
                     ms = (time.perf_counter() - t_read) * 1000
                     self.proc_ms += (ms - self.proc_ms) * 0.05
