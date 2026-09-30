@@ -65,11 +65,7 @@ class App:
         self.icon.stop()
 
     def _open_monitor(self, *_):
-        # Eigener Prozess: tkinter will seinen eigenen Hauptthread.
-        here = Path(__file__).parent
-        exe = Path(sys.executable).with_name("pythonw.exe")
-        subprocess.Popen([str(exe if exe.exists() else sys.executable),
-                          str(here / "monitor.py")], cwd=str(here))
+        open_monitor()
 
     @staticmethod
     def _profile_items():
@@ -149,7 +145,8 @@ class App:
         # Mit eigenem setup() macht pystray das Icon nicht selbst sichtbar.
         icon.visible = True
         try:
-            icon.notify("Bruecke laeuft - Symbol neben der Uhr.", "DualSense")
+            icon.notify("Laeuft auch mit geschlossenem Fenster weiter - "
+                        "Symbol neben der Uhr.", "DualSense")
         except Exception:
             pass
 
@@ -166,15 +163,22 @@ def _already_running() -> bool:
     return k32.GetLastError() == 183  # ERROR_ALREADY_EXISTS
 
 
-if __name__ == "__main__":
-    if _already_running():
-        import ctypes
+def open_monitor() -> None:
+    """Anzeigefenster als eigener Prozess - tkinter will seinen eigenen
+    Hauptthread. Ist es schon offen, holt es sich selbst nach vorn."""
+    here = Path(__file__).parent
+    exe = Path(sys.executable).with_name("pythonw.exe")
+    subprocess.Popen([str(exe if exe.exists() else sys.executable),
+                      str(here / "monitor.py")], cwd=str(here))
 
-        ctypes.windll.user32.MessageBoxW(
-            None,
-            "Die DualSense-Bruecke laeuft bereits.\n\n"
-            "Das Controller-Symbol sitzt neben der Uhr (ggf. unter dem "
-            "Pfeil ^). Beenden ueber Rechtsklick > Beenden.",
-            "DualSense", 0x40)
+
+if __name__ == "__main__":
+    # Ein Symbol fuer alles: startet die Bruecke und zeigt das Fenster.
+    # Laeuft sie schon, wird nur das Fenster geoeffnet - nie ein zweiter
+    # virtueller Pad. --hidden startet ohne Fenster (z. B. fuer Autostart).
+    if _already_running():
+        open_monitor()
         raise SystemExit(0)
+    if "--hidden" not in sys.argv:
+        open_monitor()
     App().run()

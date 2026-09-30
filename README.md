@@ -6,9 +6,14 @@ jedes XInput-Spiel als echten Controller sieht. USB und Bluetooth.
 ## Start
 
 ```
-pythonw tray.py     # empfohlen: Tray-Icon mit Bruecke und Akkuanzeige
-python bridge.py    # nur die Bruecke, mit Live-Ausgabe im Terminal
+pythonw tray.py            # empfohlen: Bruecke im Tray plus Anzeigefenster
+pythonw tray.py --hidden   # dasselbe ohne Fenster, z. B. fuer Autostart
+python bridge.py           # nur die Bruecke, mit Live-Ausgabe im Terminal
 ```
+
+Eine Verknuepfung auf `tray.py` genuegt: Der erste Start bringt Bruecke
+und Fenster, jeder weitere holt nur das Fenster nach vorn. Wird das
+Fenster geschlossen, laeuft die Bruecke im Tray weiter.
 
 Beim Start wird eine Sekunde lang die Ruhelage gemessen — den Controller
 dabei liegen lassen. Danach ist er als XInput-Gerät aktiv.
@@ -28,7 +33,8 @@ pythonw monitor.py
 Zeigt, ob Controller, Bruecke und virtueller Xbox-Pad da sind, und spiegelt
 die Eingaben als Schema - so, wie ein Spiel sie ueber XInput sieht. Laeuft
 die Bruecke nicht, laesst sie sich dort starten. Aus dem Tray per
-Doppelklick aufs Symbol oder "Anzeige oeffnen".
+Doppelklick aufs Symbol oder "Anzeige oeffnen" - oder die Verknuepfung
+nochmal starten.
 
 ## Profile und Einstellungen
 

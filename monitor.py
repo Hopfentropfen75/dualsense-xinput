@@ -482,7 +482,7 @@ class Monitor:
 
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title("DualSense - Anzeige")
+        self.root.title(TITLE)
         self.root.configure(bg=BG)
         self.root.resizable(False, False)
         ico = Path(__file__).with_name("dualsense.ico")
@@ -550,7 +550,7 @@ class Monitor:
         exe = Path(sys.executable).with_name("pythonw.exe")
         tray = Path(__file__).with_name("tray.py")
         subprocess.Popen([str(exe if exe.exists() else sys.executable),
-                          str(tray)], cwd=str(tray.parent))
+                          str(tray), "--hidden"], cwd=str(tray.parent))
         self.start_btn.configure(text="startet ...", state="disabled")
 
     def _scan(self) -> None:
@@ -757,5 +757,20 @@ class Monitor:
         self.root.mainloop()
 
 
+TITLE = "DualSense - Anzeige"
+
+
+def _focus_existing() -> bool:
+    """Ist das Fenster schon offen, nur nach vorn holen statt ein zweites."""
+    user32 = ctypes.windll.user32
+    hwnd = user32.FindWindowW(None, TITLE)
+    if not hwnd:
+        return False
+    user32.ShowWindow(hwnd, 9)          # SW_RESTORE, falls minimiert
+    user32.SetForegroundWindow(hwnd)
+    return True
+
+
 if __name__ == "__main__":
-    Monitor().run()
+    if not _focus_existing():
+        Monitor().run()
